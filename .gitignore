@@ -222,3 +222,4 @@ runs/
 runs_demo/
 assets/menagerie/
 .claude/worktrees/
+MUJOCO_LOG.TXT
