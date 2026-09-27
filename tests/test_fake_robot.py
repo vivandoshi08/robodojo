@@ -27,7 +27,7 @@ def _run(code: str, robot):
 
 
 def test_signatures_match_simrobot_and_protocol():
-    assert set(API) == {"get_state", "get_image", "move_to", "rotate_gripper", "open_gripper", "close_gripper", "wait"}
+    assert set(API) == {"get_state", "get_image", "get_camera", "move_to", "rotate_gripper", "open_gripper", "close_gripper", "wait"}
     for name in API:
         fake, sim, proto = (inspect.signature(getattr(c, name)) for c in (FakeRobot, SimRobot, Robot))
         assert fake == sim, name

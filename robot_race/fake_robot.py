@@ -67,8 +67,16 @@ class FakeRobot:
     def get_state(self) -> dict:
         return copy.deepcopy(self._s)
 
-    def get_image(self, view: str = "front", width: int = 320, height: int = 240) -> np.ndarray:
+    def get_image(self, view: str = "front", width: int = 320, height: int = 240, depth: bool = False) -> np.ndarray:
+        if depth:
+            return np.full((int(height), int(width)), 1.0, np.float32)
         return np.zeros((int(height), int(width), 3), np.uint8)
+
+    def get_camera(self, view: str = "front", width: int = 320, height: int = 240) -> dict:
+        f = 0.5 * height / math.tan(math.radians(25))
+        return {"view": view, "width": width, "height": height,
+                "K": [[f, 0.0, width / 2], [0.0, f, height / 2], [0.0, 0.0, 1.0]],
+                "cam_to_world": [[1.0, 0, 0, 0], [0, 1.0, 0, 0], [0, 0, 1.0, 0], [0, 0, 0, 1.0]]}
 
     def move_to(self, xyz, speed: float = 0.2) -> list:
         self.call_log.append(f"move_to({list(np.round(xyz, 3))}, speed={speed})")

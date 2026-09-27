@@ -152,13 +152,28 @@ class Env:
         """(t [T], qpos [T, nq]) sampled every step()/settle() chunk."""
         return np.array(self._traj_t), np.array(self._traj_q)
 
-    def render(self, view="front", width=320, height=240):
+    def render(self, view="front", width=320, height=240, depth=False):
+        """RGB uint8 [H, W, 3], or with depth=True the metric depth float32 [H, W] (m along the optical axis)."""
         r = mujoco.Renderer(self.model, height, width)
+        if depth:
+            r.enable_depth_rendering()
         r.update_scene(self.data, camera=view)
         r.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = SHADOWS
         img = r.render().copy()
         r.close()
-        return img
+        return img.astype(np.float32) if depth else img
+
+    def camera_info(self, view="front", width=320, height=240) -> dict:
+        """Pinhole calibration, OpenCV convention (x right, y down, z forward): pixel = K @ (R^T (p - t))."""
+        cam = self.model.camera(view)
+        f = 0.5 * height / np.tan(np.radians(float(cam.fovy[0])) / 2)
+        R_mj = self.data.cam_xmat[cam.id].reshape(3, 3)  # MuJoCo camera looks along -z with y up
+        R = R_mj @ np.diag([1.0, -1.0, -1.0])
+        T = np.eye(4); T[:3, :3], T[:3, 3] = R, self.data.cam_xpos[cam.id]
+        K = [[f, 0.0, width / 2], [0.0, f, height / 2], [0.0, 0.0, 1.0]]
+        return {"view": view, "width": width, "height": height,
+                "K": [[round(float(v), 4) for v in row] for row in K],
+                "cam_to_world": [[round(float(v), 5) for v in row] for row in T]}
 
     def close(self):
         if self.renderer is not None:

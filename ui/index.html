@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Robo Dojo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --paper:#F1EFE4;      /* riso stock */
+  --wash:#D5DCEF;       /* pale blue print wash */
+  --riso:#2341D6;       /* ultramarine riso ink */
+  --ink:#000;
+  --ink-soft:#4B5778;
+  --bp:#2356A8;         /* blueprint field */
+  --bp-deep:#1B4690;
+  --bp-line:#F4F6FF;
+  --bp-grid:rgba(255,255,255,.14);
+  --card:#F7F6EE;
+  --hit:#2341D6;
+  --miss:#000;
+  --display:"Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body:"Archivo", "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D1633;--wash:#1B2750;--riso:#7F97FF;--ink:#F1EFE4;--ink-soft:#A3AECC;
+    --bp:#1A3F86;--bp-deep:#143270;--card:#121D40;--hit:#7F97FF;--miss:#F1EFE4;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0D1633;--wash:#1B2750;--riso:#7F97FF;--ink:#F1EFE4;--ink-soft:#A3AECC;
+  --bp:#1A3F86;--bp-deep:#143270;--card:#121D40;--hit:#7F97FF;--miss:#F1EFE4;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;position:relative}
+/* print grain */
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;opacity:.22;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .1 0 0 0 0 .15 0 0 0 0 .4 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body::after{mix-blend-mode:screen;opacity:.08}}
+.wrap{max-width:1280px;margin:0 auto;padding:20px clamp(12px,3vw,32px) 48px;position:relative}
+
+header{position:relative;display:grid;grid-template-columns:1fr auto;align-items:end;gap:16px 24px;padding:8px 0 20px;margin-bottom:22px;border-bottom:2px solid var(--riso);overflow:hidden}
+.dots{position:absolute;inset:-20px -40px 0 30%;z-index:0;pointer-events:none;
+  background-image:radial-gradient(circle,var(--riso) 42%,transparent 44%);background-size:9px 9px;opacity:.55;
+  -webkit-mask-image:linear-gradient(115deg,transparent 18%,#000 55%,transparent 88%);mask-image:linear-gradient(115deg,transparent 18%,#000 55%,transparent 88%)}
+.dots.fine{background-size:5px 5px;opacity:.35;-webkit-mask-image:linear-gradient(115deg,transparent 45%,#000 70%,transparent 100%);mask-image:linear-gradient(115deg,transparent 45%,#000 70%,transparent 100%)}
+.titleblock{position:relative;z-index:1}
+h1{font-family:var(--display);font-variation-settings:"wdth" 125;font-weight:900;font-size:clamp(52px,10vw,132px);line-height:.82;margin:0;letter-spacing:-.035em;color:var(--riso);
+  text-shadow:4px 3px 0 color-mix(in srgb,var(--riso) 28%,transparent)}
+.tag{margin:14px 0 0;color:var(--ink);max-width:48ch;font-size:15px}
+.controls{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end;background:var(--paper);padding:8px;border:1.5px solid var(--riso)}
+@media (max-width:760px){header{grid-template-columns:1fr}.controls{justify-content:flex-start}}
+.round{font-family:var(--display);font-variation-settings:"wdth" 125;font-size:22px;font-weight:900;margin-right:6px;color:var(--riso)}
+button{font:inherit;cursor:pointer;border-radius:0}
+button:focus-visible{outline:3px solid var(--riso);outline-offset:2px}
+.primary{background:var(--riso);color:var(--paper);border:0;padding:11px 20px;font-weight:800}
+.primary:hover{background:var(--ink)}
+.primary:disabled{opacity:.55;cursor:wait}
+.ghost{background:transparent;border:1.5px solid var(--riso);color:var(--riso);padding:9px 14px;font-weight:600}
+.seg{display:inline-flex;border:1.5px solid var(--riso)}
+.seg button{border:0;background:transparent;color:var(--riso);padding:9px 12px;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--riso);color:var(--paper)}
+
+.main{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:20px}
+@media (max-width:900px){.main{grid-template-columns:1fr}}
+
+/* blueprint mats */
+.mats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:620px){.mats{grid-template-columns:1fr}}
+.mat{background:var(--bp);color:var(--bp-line);border-radius:14px;padding:14px 16px 12px;position:relative;outline:3px solid transparent;outline-offset:3px;transition:outline-color .2s}
+.mat.hit{outline-color:var(--hit)}
+.mat.miss{outline-color:var(--miss)}
+.mat.champion{outline-color:var(--riso);outline-width:4px}
+.mat-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mat h2{font-family:var(--display);font-variation-settings:"wdth" 125;font-size:22px;margin:0;font-weight:900;letter-spacing:-.02em}
+.mat .desc{margin:0;color:rgba(244,246,255,.72);font-size:13px}
+.belt{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:rgba(244,246,255,.8);white-space:nowrap}
+.belt i{display:inline-block;width:30px;height:10px;border:1px solid var(--bp-line)}
+.mat svg{display:block;width:100%;height:auto;margin:8px 0 4px;border:1px solid rgba(255,255,255,.35)}
+.caption{font-size:13px;color:rgba(244,246,255,.8);min-height:1.5em;margin:0}
+.stats{display:flex;gap:18px;margin-top:6px;font-size:13px;border-top:1px solid rgba(255,255,255,.35);padding-top:6px}
+.stats b{font-size:20px;font-family:var(--display);font-variation-settings:"wdth" 125;font-weight:900;margin-right:4px}
+.crown{position:absolute;top:-13px;left:14px;background:var(--paper);color:var(--riso);border:1.5px solid var(--riso);font-size:12px;font-weight:800;padding:2px 10px;display:none}
+.mat.champion .crown{display:block}
+
+aside{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--card);border:1.5px solid var(--riso);padding:14px 16px;position:relative}
+.card h3{font-family:var(--display);font-variation-settings:"wdth" 125;font-size:21px;font-weight:900;letter-spacing:-.02em;margin:0 0 8px;color:var(--riso)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:5px 4px;border-bottom:1px solid var(--wash)}
+th{font-weight:500;color:var(--ink-soft)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:first-child td{color:var(--riso);font-weight:700}
+.verdict{margin:10px 0 0;padding:10px 12px;background:var(--riso);color:var(--paper);font-size:14px}
+.verdict:empty{display:none}
+
+.journal{max-height:380px;overflow-y:auto;margin:0 -4px;padding:0 4px}
+.entry{display:grid;grid-template-columns:18px 1fr;gap:6px;padding:7px 0;border-bottom:1px solid var(--wash);font-size:13px}
+.entry .mark{font-weight:900}
+.entry.ok .mark{color:var(--hit)}
+.entry.bad .mark{color:var(--miss)}
+.entry .who{font-weight:700}
+.entry .why{color:var(--ink-soft)}
+.entry.bad .why{color:var(--ink)}
+.entry .recall{display:inline-block;margin-top:2px;background:var(--wash);color:var(--riso);font-size:12px;padding:0 6px}
+.empty{color:var(--ink-soft);font-size:14px;margin:4px 0}
+.filter{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.filter button{border:1px solid var(--riso);background:transparent;color:var(--riso);padding:3px 9px;font-size:12px}
+.filter button[aria-pressed="true"]{background:var(--riso);color:var(--paper)}
+
+.lower{margin-top:28px}
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--riso)}
+.tabs button{border:0;background:transparent;color:var(--riso);padding:10px 18px;font-family:var(--display);font-variation-settings:"wdth" 125;font-size:19px;font-weight:900;letter-spacing:-.02em}
+.tabs button[aria-selected="true"]{background:var(--riso);color:var(--paper)}
+.tabpanel{background:var(--card);border:1.5px solid var(--riso);border-top:0;padding:22px 24px}
+
+/* the scroll: ruled notebook in blue ink */
+.scroll{max-width:74ch;font-size:15px;color:var(--riso);
+  background-image:repeating-linear-gradient(to bottom,transparent 0 29px,var(--wash) 29px 30px);line-height:30px;padding-left:18px;border-left:2px solid var(--riso)}
+.scroll .md-h1{font-family:var(--display);font-variation-settings:"wdth" 125;font-size:28px;font-weight:900;letter-spacing:-.02em;margin:0;line-height:30px}
+.scroll .ver{color:var(--ink-soft);font-size:13px;margin:0 0 0}
+.scroll .md-h2{font-weight:800;margin:30px 0 0;color:var(--ink)}
+.scroll ul{margin:0;padding-left:0;list-style:none}
+.scroll li{padding:0 8px;margin:0}
+.scroll li.fresh{background:var(--riso);color:var(--paper);box-decoration-break:clone}
+.scroll li.fresh::after{content:" refined";font-size:11px;font-weight:800;opacity:.8}
+.scroll .empty{color:var(--ink-soft)}
+
+.belts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.beltcard{border:1.5px solid var(--riso);padding:12px}
+.beltcard h4{margin:0 0 6px;font-family:var(--display);font-variation-settings:"wdth" 125;font-size:18px;font-weight:900;color:var(--riso)}
+.beltbar{height:22px;border:1.5px solid var(--riso);margin:6px 0}
+.beltcard p{margin:0;font-size:13px;color:var(--ink-soft)}
+.beltcard p b{color:var(--ink)}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="dots" aria-hidden="true"></div><div class="dots fine" aria-hidden="true"></div>
+    <div class="titleblock">
+      <h1>Robo<br>Dojo</h1>
+      <p class="tag">Four strategies spar on the same trash-into-bin task. The sensei scores every match, and the winning technique is written to the scroll.</p>
+    </div>
+    <div class="controls">
+      <span class="round" id="roundLabel">Round 0</span>
+      <div class="seg" role="group" aria-label="Playback speed">
+        <button type="button" data-speed="1" aria-pressed="true">1×</button>
+        <button type="button" data-speed="3" aria-pressed="false">3×</button>
+      </div>
+      <button type="button" class="ghost" id="resetBtn">Reset dojo</button>
+      <button type="button" class="primary" id="startBtn">Start sparring match</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="mats" id="mats" aria-label="Sandboxes"></section>
+    <aside>
+      <div class="card">
+        <h3>Sensei's scorecard</h3>
+        <table>
+          <thead><tr><th>Style</th><th class="num">In</th><th class="num">Avg time</th><th class="num">Bins down</th><th class="num">Score</th></tr></thead>
+          <tbody id="scoreBody"></tbody>
+        </table>
+        <p class="verdict" id="verdict"></p>
+      </div>
+      <div class="card">
+        <h3>Training journal</h3>
+        <div class="filter" id="journalFilter"></div>
+        <div class="journal" id="journal"><p class="empty">No attempts yet. Start a sparring match and every hit and miss is recorded here, with the reason.</p></div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="lower">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" aria-controls="panelScroll" id="tabScroll">The scroll</button>
+      <button role="tab" aria-selected="false" aria-controls="panelBelts" id="tabBelts">Belt ranks</button>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="panelScroll" aria-labelledby="tabScroll">
+      <div class="scroll" id="scroll"><p class="empty">The scroll is empty. Win a sparring match and the proven techniques get written here as a readable skill.</p></div>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="panelBelts" aria-labelledby="tabBelts" hidden>
+      <div class="belts" id="belts"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const STRATS=[
+  {id:'place',name:'Place style',desc:'Carry it over the bin and set it down',time:[9,2]},
+  {id:'drop', name:'Drop style', desc:'Hover over the rim and let go',time:[6,1.5]},
+  {id:'toss', name:'Toss style', desc:'Throw it from where it stands',time:[3,1]},
+  {id:'push', name:'Push style', desc:'Slide it off a table edge into the bin',time:[5,1]},
+];
+const TRASH={paper:{label:'crumpled paper',h:14},bottle:{label:'plastic bottle',h:18},can:{label:'soda can',h:14}};
+const BASE={place:{paper:.9,bottle:.8,can:.9},drop:{paper:.5,bottle:.88,can:.85},toss:{paper:.88,bottle:.3,can:.55},push:{paper:.5,bottle:.55,can:.75}};
+const REASONS={
+ 'place-reach':{t:d=>`Bin at ${d} cm is past the arm's reach, set down short of the rim`,l:'Place fails past about 55 cm: the arm cannot reach over the rim',m:'short'},
+ 'place-slip':{t:()=>'Bottle slipped in the gripper and clipped the rim',l:'Grip bottles at the middle, not the neck, when placing',m:'long'},
+ 'place-rim':{t:()=>'Set down on the rim instead of inside',l:'Lower 5 cm past the rim before opening the gripper',m:'short'},
+ 'drop-drift':{t:()=>'Paper drifted sideways on the way down',l:'Paper is too light to drop from high up; it drifts',m:'long'},
+ 'drop-rim':{t:()=>'Bounced off the rim, released off-center',l:'Center over the bin and release 10 cm above the rim',m:'short'},
+ 'drop-reach':{t:d=>`Couldn't hover over a bin at ${d} cm`,l:'Drop only works when the bin is within 65 cm',m:'short'},
+ 'toss-close':{t:d=>`Bin at ${d} cm is too close for an arc, overshot`,l:"Don't toss at bins closer than 35 cm",m:'long'},
+ 'toss-bounce':{t:()=>'Bottle landed inside but bounced back out',l:'Tossed bottles bounce out; drop them instead',m:'long'},
+ 'toss-short':{t:()=>'Can was heavier than the throw assumed, fell short',l:'Add release speed for cans; they fall short',m:'short'},
+ 'toss-long':{t:()=>'Throw sailed long',l:'Lower release speed for light items',m:'long'},
+ 'push-roll':{t:()=>'Bottle rolled sideways off the edge and missed',l:'Bottles roll when pushed; push them lengthwise',m:'long'},
+ 'push-stick':{t:()=>'Paper caught on the table edge and fell short',l:'Push paper faster so it clears the edge',m:'short'},
+ 'push-fast':{t:()=>'Came off the edge too fast and overshot',l:'Slow the push for heavy items near the edge',m:'long'},
+ 'knock':{t:()=>'Knocked the bin over',l:'Approach from above, never from the side, to keep the bin upright',m:'knock'},
+};
+const BELTS=[{n:'White belt',r:0},{n:'Yellow belt',r:18},{n:'Green belt',r:30},{n:'Brown belt',r:44},{n:'Black belt',r:100}];
+function beltFill(b,col){if(b.r===0)return 'transparent';if(b.r>=100)return col;return `radial-gradient(circle,${col} ${b.r}%,transparent ${b.r+2}%) 0 0/5px 5px`;}
+const TRIALS=5, F=160;
+
+let round=0, speed=1, running=false, records=[], wins={}, prevScroll=new Set(), scrollVersion=0, journalFilter='all';
+STRATS.forEach(s=>wins[s.id]=0);
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- build mats ---------- */
+const matsEl=document.getElementById('mats');
+const mats={};
+STRATS.forEach(s=>{
+  const el=document.createElement('article');
+  el.className='mat';
+  el.innerHTML=`<span class="crown">Round champion</span>
+  <div class="mat-head"><h2>${s.name}</h2><span class="belt" data-belt><i></i><span></span></span></div>
+  <p class="desc">${s.desc}</p>
+  <svg viewBox="0 0 330 180" role="img" aria-label="${s.name} sandbox">
+    <defs>
+      <pattern id="g-${s.id}" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M10 0H0V10" fill="none" stroke="rgba(255,255,255,.13)" stroke-width=".6"/></pattern>
+      <pattern id="h-${s.id}" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#F4F6FF" stroke-width="1"/></pattern>
+    </defs>
+    <rect width="330" height="180" fill="url(#g-${s.id})"/>
+    <line x1="0" y1="${F}" x2="330" y2="${F}" stroke="#F4F6FF" stroke-width="1.6"/>
+    <g data-table style="display:${s.id==='push'?'inline':'none'}" stroke="#F4F6FF" stroke-width="1.2" fill="none">
+      <rect data-top x="0" y="100" width="100" height="6" fill="url(#h-${s.id})"/>
+      <rect data-leg x="90" y="106" width="5" height="54"/>
+    </g>
+    <g data-arm stroke="#F4F6FF" stroke-linecap="round" fill="none">
+      <rect data-base x="0" y="0" width="30" height="10" fill="url(#h-${s.id})" stroke-width="1.2"/>
+      <line data-l1 stroke-width="4"/><line data-l2 stroke-width="3"/>
+      <circle data-j1 r="4" fill="var(--bp)" stroke-width="1.6"/><circle data-j2 r="3.5" fill="var(--bp)" stroke-width="1.6"/>
+      <path data-grip stroke-width="2"/>
+    </g>
+    <g data-item></g>
+    <g data-bin>
+      <path d="M-20,-50 L20,-50 L16,0 L-16,0 Z" fill="var(--bp)" stroke="#F4F6FF" stroke-width="1.4"/>
+      <path d="M-20,-50 L20,-50 L16,0 L-16,0 Z" fill="url(#h-${s.id})" opacity=".45"/>
+      <line x1="-23" y1="-50" x2="23" y2="-50" stroke="#F4F6FF" stroke-width="2.4"/>
+    </g>
+    <g stroke="#F4F6FF" stroke-width=".8" opacity=".85">
+      <line data-dim y1="170" y2="170" x1="49" x2="200"/>
+      <line data-dimA y1="166" y2="174" x1="49" x2="49"/><line data-dimB y1="166" y2="174" x1="200" x2="200"/>
+    </g>
+    <text data-dist font-size="9" fill="#F4F6FF" text-anchor="middle" y="179" font-family="Archivo, sans-serif" font-weight="600"></text>
+  </svg>
+  <p class="caption" data-caption>Waiting on the mat</p>
+  <div class="stats"><span><b data-in>0/0</b>in</span><span><b data-time>–</b>s avg</span><span><b data-knock>0</b>bins down</span></div>`;
+  matsEl.appendChild(el);
+  const q=a=>el.querySelector(`[${a}]`);
+  mats[s.id]={s,el,dim:q('data-dim'),dimB:q('data-dimB'),svg:q('data-arm').ownerSVGElement,item:q('data-item'),bin:q('data-bin'),dist:q('data-dist'),
+    base:q('data-base'),l1:q('data-l1'),l2:q('data-l2'),j1:q('data-j1'),j2:q('data-j2'),grip:q('data-grip'),
+    top:q('data-top'),leg:q('data-leg'),caption:q('data-caption'),in:q('data-in'),time:q('data-time'),knock:q('data-knock'),belt:q('data-belt'),
+    gx:70,gy:100,baseX:s.id==='push'?16:34,binX:200,stats:null};
+  setBin(mats[s.id],200,0); setItem(mats[s.id],null); drawArm(mats[s.id]);
+});
+
+function armCfg(id){return id==='push'?{sy:76,L:48,home:16}:{sy:F-42,L:55,home:34}}
+function drawArm(m){
+  const c=armCfg(m.s.id), sx=m.baseX+15, sy=c.sy, L=c.L;
+  let dx=m.gx-sx, dy=m.gy-sy, d=Math.min(Math.hypot(dx,dy),2*L-.5);
+  const a=Math.atan2(dy,dx), b=Math.acos(Math.max(-1,Math.min(1,d/(2*L))));
+  const ex=sx+L*Math.cos(a-b), ey=sy+L*Math.sin(a-b), gx=sx+d*Math.cos(a), gy=sy+d*Math.sin(a);
+  m.base.setAttribute('x',m.baseX); m.base.setAttribute('y',sy+6);
+  set(m.l1,{x1:sx,y1:sy,x2:ex,y2:ey}); set(m.l2,{x1:ex,y1:ey,x2:gx,y2:gy});
+  set(m.j1,{cx:sx,cy:sy}); set(m.j2,{cx:ex,cy:ey});
+  m.grip.setAttribute('d',`M${gx-6},${gy-4} L${gx},${gy} L${gx+6},${gy-4}`);
+}
+function set(el,o){for(const k in o)el.setAttribute(k,o[k])}
+function setBin(m,x,ang){m.binX=x;m.bin.setAttribute('transform',`translate(${x},${F}) rotate(${ang},16,0)`);if(!ang){m.dim.setAttribute('x2',x);m.dimB.setAttribute('x1',x);m.dimB.setAttribute('x2',x);m.dist.setAttribute('x',(49+x)/2)}}
+function itemSVG(t){
+  if(t==='paper')return `<path d="M-7,-2 L-4,-7 L2,-6 L7,-3 L6,3 L2,7 L-4,6 L-7,2Z" fill="#F4F6FF"/><path d="M-3,-3 L2,1 M1,-4 L-1,3 M-5,2 L0,4" stroke="#2356A8" stroke-width=".9" fill="none"/>`;
+  if(t==='bottle')return `<rect x="-4" y="-7" width="8" height="16" rx="3" fill="#2356A8" stroke="#F4F6FF" stroke-width="1.4"/><rect x="-2" y="-10" width="4" height="4" fill="#F4F6FF"/><line x1="-4" y1="0" x2="4" y2="0" stroke="#F4F6FF" stroke-width="1"/>`;
+  return `<rect x="-5" y="-7" width="10" height="14" rx="1.5" fill="#F4F6FF"/><rect x="-5" y="-2" width="10" height="3" fill="#2356A8"/>`;
+}
+function setItem(m,t){m.item.innerHTML=t?itemSVG(t):''}
+function placeItem(m,x,y,r){m.item.setAttribute('transform',`translate(${x},${y}) rotate(${r||0})`)}
+
+/* ---------- trajectories ---------- */
+function seg(a,b,held,ease){const n=Math.max(8,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])/3));const out=[];for(let i=1;i<=n;i++){let s=i/n;if(ease)s=s*s;out.push({x:a[0]+(b[0]-a[0])*s,y:a[1]+(b[1]-a[1])*s,held})}return out}
+function arc(a,b,apex,spin){const n=Math.max(18,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])/3));const out=[];for(let i=1;i<=n;i++){const s=i/n;out.push({x:a[0]+(b[0]-a[0])*s,y:a[1]+(b[1]-a[1])*s-apex*4*s*(1-s),held:false,r:spin*s})}return out}
+function tip(frames,m){const n=20;return frames.map((f,i)=>({...f,bin:Math.min(80,80*i/n)}))}
+
+function trajectory(m,trial,out){
+  const bx=m.binX, h=TRASH[trial.trash].h, rest=F-h/2, inBin=F-6-h/2, id=m.s.id;
+  let f=[], start;
+  const miss=out.ok?null:REASONS[out.key].m;
+  if(id==='place'){
+    start=[70,rest];
+    f=[...seg(start,[70,80],true),...seg([70,80],[bx,80],true),...seg([bx,80],[bx,100],true)];
+    if(!miss)f.push(...seg([bx,100],[bx,inBin],false,true));
+    else if(miss==='knock')f.push(...tip(arc([bx,100],[bx+46,rest],10,120),m));
+    else f.push(...arc([bx,100],[bx+(miss==='short'?-34:34),rest],15,200));
+  }else if(id==='drop'){
+    start=[70,rest];
+    f=[...seg(start,[70,40],true),...seg([70,40],[bx,40],true)];
+    if(!miss)f.push(...seg([bx,40],[bx,inBin],false,true));
+    else if(miss==='knock')f.push(...seg([bx,40],[bx+14,106],false,true),...tip(arc([bx+14,106],[bx+48,rest],8,90),m));
+    else{const dir=miss==='short'?-1:1;f.push(...seg([bx,40],[bx+dir*16,106],false,true),...arc([bx+dir*16,106],[bx+dir*40,rest],12,180))}
+  }else if(id==='toss'){
+    start=[70,rest];
+    f=[...seg(start,[55,95],true),...seg([55,95],[40,105],true),...seg([40,105],[75,80],true)];
+    if(!miss)f.push(...arc([75,80],[bx,104],55,540),...seg([bx,104],[bx,inBin],false,true));
+    else if(miss==='knock')f.push(...arc([75,80],[bx-18,106],50,400),...tip(arc([bx-18,106],[bx+44,rest],6,90),m));
+    else f.push(...arc([75,80],[bx+(miss==='short'?-42:44),rest],miss==='short'?40:60,540));
+  }else{
+    const E=bx-26, y0=100-h/2; start=[40,y0];
+    f=[...seg(start,[E-4,y0],true)];
+    if(!miss)f.push(...arc([E-4,y0],[bx,104],6,200),...seg([bx,104],[bx,inBin],false,true));
+    else if(miss==='knock')f.push(...arc([E-4,y0],[bx-14,110],4,90),...tip(arc([bx-14,110],[bx+44,rest],6,90),m));
+    else if(miss==='short')f.push(...seg([E-4,y0],[E+2,y0],false),...seg([E+2,y0],[E+2,rest],false,true));
+    else f.push(...arc([E-4,y0],[bx+44,rest],8,300));
+  }
+  return {start,frames:f};
+}
+
+function play(m,traj){
+  return new Promise(res=>{
+    const c=armCfg(m.s.id), movesBase=m.s.id!=='toss';
+    placeItem(m,traj.start[0],traj.start[1]);
+    let i=0, binAng=0;
+    const step=()=>{
+      const k=reduce?traj.frames.length:speed;
+      for(let j=0;j<k&&i<traj.frames.length;j++,i++){
+        const fr=traj.frames[i];
+        placeItem(m,fr.x,fr.y,fr.r);
+        if(fr.held){m.gx=fr.x;m.gy=fr.y-(m.s.id==='push'?0:8);if(m.s.id==='push')m.gx=fr.x-10;
+          if(movesBase)m.baseX=Math.max(c.home,fr.x-(m.s.id==='push'?60:62));}
+        else{m.gx+=(70-m.gx)*.08;m.gy+=((m.s.id==='push'?60:100)-m.gy)*.08;m.baseX+=(c.home-m.baseX)*.08}
+        if(fr.bin!==undefined){binAng=fr.bin;setBin(m,m.binX,binAng)}
+      }
+      drawArm(m);
+      if(i<traj.frames.length)requestAnimationFrame(step);else setTimeout(res,reduce?150:300/speed);
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+/* ---------- judging & memory ---------- */
+function pastMisses(s,t){return records.filter(r=>r.strat===s&&r.trash===t&&!r.ok).length}
+function judge(s,t,d){
+  let p=BASE[s][t];
+  if(s==='place'&&d>55)p*=.25;
+  if(s==='drop'&&d>65)p*=.35;
+  if(s==='toss'&&d<35)p*=.3;
+  const memo=pastMisses(s,t), bonus=Math.min(.2,memo*.04);
+  p=Math.min(.97,p+bonus);
+  const [mu,sd]=STRATS.find(x=>x.id===s).time;
+  let time=Math.max(1,mu+(Math.random()*2-1)*sd);
+  if(Math.random()<p)return {ok:true,time,memo};
+  let key;
+  if(s==='place')key=d>55?'place-reach':t==='bottle'?'place-slip':'place-rim';
+  if(s==='drop')key=d>65?'drop-reach':t==='paper'?'drop-drift':'drop-rim';
+  if(s==='toss')key=d<35?'toss-close':t==='bottle'?'toss-bounce':t==='can'?'toss-short':'toss-long';
+  if(s==='push')key=t==='bottle'?'push-roll':t==='paper'?'push-stick':'push-fast';
+  if(!/reach|close/.test(key)&&Math.random()<(s==='toss'?.1:.25))key='knock';
+  return {ok:false,key,time:time+1.5,memo};
+}
+function score(st){if(!st.n)return 0;return Math.round(st.k/st.n*100-(st.t/st.n)*2-st.kn*15)}
+
+/* ---------- race ---------- */
+async function runRace(){
+  running=true; startBtn.disabled=true; startBtn.textContent='Sparring…';
+  round++; roundLabel.textContent=`Round ${round}`; verdict.textContent='';
+  const trials=[...Array(TRIALS)].map(()=>({trash:['paper','bottle','can'][Math.floor(Math.random()*3)],dist:25+Math.floor(Math.random()*56)}));
+  Object.values(mats).forEach(m=>{m.stats={n:0,k:0,t:0,kn:0};m.el.classList.remove('champion');updateMat(m)});
+  renderScore();
+  await Promise.all(Object.values(mats).map(async m=>{
+    for(let i=0;i<trials.length;i++){
+      const tr=trials[i], bx=90+(tr.dist-25)/55*200;
+      setBin(m,bx,0); m.dist.textContent=`${tr.dist} cm`;
+      if(m.s.id==='push'){const E=bx-26;m.top.setAttribute('width',E);m.leg.setAttribute('x',E-6)}
+      setItem(m,tr.trash);
+      m.caption.textContent=`Trial ${i+1} of ${TRIALS}: ${TRASH[tr.trash].label}, bin at ${tr.dist} cm`;
+      const out=judge(m.s.id,tr.trash,tr.dist);
+      await play(m,trajectory(m,tr,out));
+      m.stats.n++; m.stats.t+=out.time; if(out.ok)m.stats.k++; if(out.key==='knock')m.stats.kn++;
+      m.el.classList.remove('hit','miss'); m.el.classList.add(out.ok?'hit':'miss');
+      setTimeout(()=>m.el.classList.remove('hit','miss'),500);
+      records.push({round,strat:m.s.id,trash:tr.trash,dist:tr.dist,ok:out.ok,key:out.key,time:out.time,memo:out.memo,
+        why:out.ok?`Went in, ${out.time.toFixed(1)} s`:REASONS[out.key].t(tr.dist)});
+      updateMat(m); renderScore(); renderJournal();
+    }
+    m.caption.textContent='Match finished';
+  }));
+  // sensei decides
+  const ranked=Object.values(mats).sort((a,b)=>score(b.stats)-score(a.stats));
+  const w=ranked[0], st=w.stats; wins[w.s.id]++;
+  w.el.classList.add('champion');
+  const runner=ranked[1];
+  verdict.textContent=`${w.s.name} wins round ${round}: ${st.k} of ${st.n} in, ${(st.t/st.n).toFixed(1)} s average, ${st.kn?st.kn+' bin'+(st.kn>1?'s':'')+' knocked over':'no bins knocked over'}. ${runner.s.name} was next with a score of ${score(runner.stats)}.`;
+  Object.values(mats).forEach(updateMat);
+  renderScore(); distill(); renderBelts();
+  running=false; startBtn.disabled=false; startBtn.textContent='Start next match';
+}
+
+function updateMat(m){
+  const st=m.stats||{n:0,k:0,t:0,kn:0};
+  m.in.textContent=`${st.k}/${st.n}`; m.time.textContent=st.n?(st.t/st.n).toFixed(1):'–'; m.knock.textContent=st.kn;
+  const b=BELTS[Math.min(4,wins[m.s.id])]; m.belt.querySelector('i').style.background=beltFill(b,'#F4F6FF'); m.belt.querySelector('span').textContent=b.n;
+}
+function renderScore(){
+  const rows=Object.values(mats).map(m=>({m,st:m.stats||{n:0,k:0,t:0,kn:0}})).sort((a,b)=>score(b.st)-score(a.st));
+  scoreBody.innerHTML=rows.map(({m,st})=>`<tr><td>${m.s.name}</td><td class="num">${st.k}/${st.n}</td><td class="num">${st.n?(st.t/st.n).toFixed(1)+' s':'–'}</td><td class="num">${st.kn}</td><td class="num"><b>${st.n?score(st):'–'}</b></td></tr>`).join('');
+}
+function renderJournal(){
+  const list=records.filter(r=>journalFilter==='all'||r.strat===journalFilter).slice().reverse();
+  if(!list.length){journal.innerHTML='<p class="empty">No attempts for this style yet.</p>';return}
+  journal.innerHTML=list.slice(0,80).map(r=>{
+    const s=STRATS.find(x=>x.id===r.strat);
+    const recall=r.memo?`<span class="recall">Recalled ${r.memo} earlier miss${r.memo>1?'es':''} with ${TRASH[r.trash].label}</span>`:'';
+    return `<div class="entry ${r.ok?'ok':'bad'}"><span class="mark" aria-label="${r.ok?'Hit':'Miss'}">${r.ok?'✓':'✗'}</span><div><span class="who">${s.name}</span>, round ${r.round}: ${TRASH[r.trash].label} at ${r.dist} cm<br><span class="why">${r.why}</span>${recall}</div></div>`;
+  }).join('');
+}
+function renderFilter(){
+  const opts=[{id:'all',name:'All'}].concat(STRATS.map(s=>({id:s.id,name:s.name.replace(' style','')})));
+  journalFilterEl.innerHTML=opts.map(o=>`<button type="button" data-f="${o.id}" aria-pressed="${journalFilter===o.id}">${o.name}</button>`).join('');
+}
+const journalFilterEl=document.getElementById('journalFilter');
+journalFilterEl.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;journalFilter=b.dataset.f;renderFilter();if(records.length)renderJournal()});
+
+/* ---------- the scroll (distilled skill) ---------- */
+function rate(filter){const r=records.filter(filter);return {k:r.filter(x=>x.ok).length,n:r.length}}
+function bestStyle(extra){
+  let best=null;
+  STRATS.forEach(s=>{const r=rate(x=>x.strat===s.id&&extra(x));if(r.n>=2&&(!best||r.k/r.n>best.k/best.n))best={s,...r}});
+  return best;
+}
+function distill(){
+  scrollVersion++;
+  const items=[],dists=[],watch=[];
+  Object.entries(TRASH).forEach(([id,t])=>{
+    const b=bestStyle(x=>x.trash===id);
+    if(b)items.push(`${t.label[0].toUpperCase()+t.label.slice(1)}: use ${b.s.name.toLowerCase()}. ${b.k} of ${b.n} went in.`);
+  });
+  const far=bestStyle(x=>x.dist>=50), near=bestStyle(x=>x.dist<50);
+  if(far)dists.push(`Bin 50 cm or farther: ${far.s.name.toLowerCase()} (${far.k} of ${far.n}).`);
+  if(near)dists.push(`Bin closer than 50 cm: ${near.s.name.toLowerCase()} (${near.k} of ${near.n}).`);
+  const counts={};records.filter(r=>!r.ok).forEach(r=>counts[r.key]=(counts[r.key]||0)+1);
+  Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,4).forEach(([k,c])=>watch.push(`${REASONS[k].l}. Seen ${c} time${c>1?'s':''}.`));
+  const all=[...items,...dists,...watch], now=new Set(all);
+  const li=l=>`<li class="${prevScroll.has(l)||scrollVersion===1?'':'fresh'}">${l}</li>`;
+  scroll.innerHTML=`<p class="md-h1">Throwing trash into a bin</p>
+    <p class="ver">SKILL.md version ${scrollVersion}, refined after round ${round} from ${records.length} recorded attempts</p>
+    <p class="md-h2">Pick a style by item</p><ul>${items.map(li).join('')||'<li>Not enough attempts yet.</li>'}</ul>
+    <p class="md-h2">Pick a style by distance</p><ul>${dists.map(li).join('')||'<li>Not enough attempts yet.</li>'}</ul>
+    <p class="md-h2">Watch for</p><ul>${watch.map(li).join('')||'<li>No misses recorded.</li>'}</ul>`;
+  prevScroll=now;
+}
+function renderBelts(){
+  belts.innerHTML=STRATS.map(s=>{
+    const w=wins[s.id], b=BELTS[Math.min(4,w)], r=rate(x=>x.strat===s.id);
+    const next=w>=4?'Highest rank. Ready for the grading exam on the real arm.':`1 more win to ${BELTS[w+1].n.toLowerCase()}.`;
+    return `<div class="beltcard"><h4>${s.name}</h4><div class="beltbar" style="background:${beltFill(b,'var(--riso)')}"></div>
+      <p><b>${b.n}</b>, ${w} win${w===1?'':'s'}. ${r.n?`${r.k} of ${r.n} attempts in overall.`:'No attempts yet.'}</p><p>${next}</p></div>`;
+  }).join('');
+}
+
+/* ---------- wiring ---------- */
+const startBtn=document.getElementById('startBtn'), roundLabel=document.getElementById('roundLabel'),
+  verdict=document.getElementById('verdict'), scoreBody=document.getElementById('scoreBody'),
+  journal=document.getElementById('journal'), scroll=document.getElementById('scroll'), belts=document.getElementById('belts');
+startBtn.addEventListener('click',()=>{if(!running)runRace()});
+document.querySelectorAll('[data-speed]').forEach(b=>b.addEventListener('click',()=>{
+  speed=+b.dataset.speed;document.querySelectorAll('[data-speed]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+}));
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  if(running)return; round=0;records=[];prevScroll=new Set();scrollVersion=0;STRATS.forEach(s=>wins[s.id]=0);
+  roundLabel.textContent='Round 0';verdict.textContent='';startBtn.textContent='Start sparring match';
+  Object.values(mats).forEach(m=>{m.stats=null;m.el.classList.remove('champion');m.caption.textContent='Waiting on the mat';updateMat(m)});
+  journal.innerHTML='<p class="empty">No attempts yet. Start a sparring match and every hit and miss is recorded here, with the reason.</p>';
+  scroll.innerHTML='<p class="empty">The scroll is empty. Win a sparring match and the proven techniques get written here as a readable skill.</p>';
+  renderScore();renderBelts();
+});
+const tabs=[['tabScroll','panelScroll'],['tabBelts','panelBelts']];
+tabs.forEach(([t,p])=>document.getElementById(t).addEventListener('click',()=>{
+  tabs.forEach(([t2,p2])=>{document.getElementById(t2).setAttribute('aria-selected',t2===t);document.getElementById(p2).hidden=p2!==p});
+}));
+renderFilter();renderScore();renderBelts();Object.values(mats).forEach(updateMat);
+</script>
+</body>
+</html>

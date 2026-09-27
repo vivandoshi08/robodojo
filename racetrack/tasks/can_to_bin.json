@@ -1,0 +1,7 @@
+{
+  "task_id": "can_to_bin",
+  "description": "Pick up the can from the table and drop it into the trash bin.",
+  "success": "The can ends up inside the bin (check_success() returns true). Fewer tries, less time, fewer collisions and less energy score higher.",
+  "max_attempts": 5,
+  "robot_api": "class Robot:\n    def get_state(self) -> dict: ...   # {\"gripper\": [x,y,z], \"gripper_open\": 0..1,\n                                       #  \"objects\": {\"can\": [x,y,z], ...},\n                                       #  \"bin\": {\"center\": [x,y,z], \"size\": [w,d,h]}}\n    def get_image(self, view=\"front\") -> \"np.ndarray\": ...  # 256x256 RGB\n    def move_to(self, xyz, speed=0.2) -> None: ...  # m/s; returns when reached or after 3 s\n    def rotate_gripper(self, yaw_deg) -> None: ...\n    def open_gripper(self) -> None: ...\n    def close_gripper(self, force=1.0) -> None: ...\n    def wait(self, seconds) -> None: ...\n# The policy runs with only `robot` in scope and is killed after 30 s."
+}

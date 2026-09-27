@@ -88,7 +88,8 @@ def _rates(results: list[dict], tasks: list[str]) -> dict:
 
 
 def run_batch(policy_path: str, tasks, seeds, jobs: int = 4, fast: bool = False, timeout_s: float = 180,
-              run_id: str | None = None, runs_dir: str = "runs", quiet: bool = False) -> dict:
+              run_id: str | None = None, runs_dir: str = "runs", quiet: bool = False,
+              observation: str = "oracle") -> dict:
     """Run policy_path on every (task, seed) with `jobs` parallel executor subprocesses. Returns the summary."""
     from robot_race import executor  # lazy: step A
 
@@ -113,7 +114,7 @@ def run_batch(policy_path: str, tasks, seeds, jobs: int = 4, fast: bool = False,
     t0 = time.time()
     summary = dict(run_id=run_id, kind="policy", policy=policy, policy_path=policy_path, code=code,
                    task=task_label, tasks=tasks, seeds=seeds, seed=seeds[0] if len(seeds) == 1 else None,
-                   model=None, strategy=None, jobs=jobs, fast=fast, timeout_s=timeout_s,
+                   model=None, strategy=None, jobs=jobs, fast=fast, timeout_s=timeout_s, observation=observation,
                    status="running", success_rate=None, success_rate_by_task={}, solved_at=None,
                    created_at=datetime.now().isoformat(timespec="seconds"), finished_at=None, wall_s=None,
                    results=[])
@@ -128,7 +129,8 @@ def run_batch(policy_path: str, tasks, seeds, jobs: int = 4, fast: bool = False,
         os.makedirs(out_dir, exist_ok=True)
         t1 = time.time()
         try:
-            res = executor.run_policy(code, task, seed, out_dir, timeout_s=timeout_s, fast=fast)
+            res = executor.run_policy(code, task, seed, out_dir, timeout_s=timeout_s, fast=fast,
+                                         observation=observation)
         except Exception:  # the executor itself blew up: record it as a failed episode
             res = dict(success=False, error="run_policy crashed:\n" + "".join(traceback.format_exc().splitlines(True)[-6:]))
         res = dict(res or {})
@@ -191,10 +193,12 @@ def main(argv=None) -> int:
     ap.add_argument("--fast", action="store_true", help="key frames + trajectory only, no mp4")
     ap.add_argument("--timeout", type=float, default=180, help="wall-clock seconds per episode")
     ap.add_argument("--run-id", default=None)
+    ap.add_argument("--observation", default="oracle", choices=["telemetry", "oracle"],
+                    help="what get_state() exposes; scripted policies like the reference read ground truth (oracle)")
     ap.add_argument("--runs-dir", default="runs")
     a = ap.parse_args(argv)
     s = run_batch(a.policy, parse_tasks(a.task), parse_seeds(a.seeds), jobs=a.jobs, fast=a.fast,
-                  timeout_s=a.timeout, run_id=a.run_id, runs_dir=a.runs_dir)
+                  timeout_s=a.timeout, run_id=a.run_id, runs_dir=a.runs_dir, observation=a.observation)
     return 0 if s["status"] == "solved" else 1
 
 
