@@ -7,9 +7,14 @@ each agent a different combination. A new simulation only needs a new task file 
     python planner.py --task-file tasks/can_to_bin.json --agents 4 --api ../interfaces.py \
                       --race cold --out plan.json
 
-Each agent's loop then adds its strategy to the prompt:
+For this repo's MuJoCo sim, --sim-task builds the task from robot_race (TASKS text + the real
+API_DOC) and renders the scene itself (get_state() + front camera):
 
-    from planner import load_strategy_prompt
+    uv run python -m racetrack.planner --sim-task can_to_bin --seed 0 --agents 4 --out plan.json
+
+Each agent's loop then adds its strategy to the prompt (run_agent.py --plan plan.json --agent-id agent-1):
+
+    from racetrack.planner import load_strategy_prompt
     prompt += load_strategy_prompt("plan.json", agent_id)
 """
 from __future__ import annotations
@@ -106,6 +111,28 @@ def load_task(task_file: Optional[str] = None, description: Optional[str] = None
     return task
 
 
+def sim_task(task_id: str, observation: str = "telemetry") -> dict[str, Any]:
+    """Planner task for a robot_race task: its text, the success check, and the exact API_DOC the
+    agents see. Keeps the planner and the agents on one API description."""
+    from robot_race.interfaces import api_doc
+    from robot_race.tasks import TASKS
+    return {"task_id": task_id, "description": TASKS[task_id]["text"],
+            "success": "The item comes to rest inside the bin (Env.check_success()). Ranking: solved seeds, "
+                       "then fewer tries, less sim time, fewer collisions, less energy.",
+            "robot_api": api_doc(observation), "max_attempts": 5}
+
+
+def observe_sim(task_id: str, seed: int, out_dir: Path,
+                observation: str = "telemetry") -> tuple[dict[str, Any], str]:
+    """Initial get_state() + front camera PNG from a fresh episode, the same view the agents get first."""
+    from robot_race.agent import observe_scene
+    state, images = observe_scene(task_id, seed, observation=observation)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    image = out_dir / f"plan_scene_{task_id}_s{seed}.png"
+    image.write_bytes(base64.b64decode(images["front"]))
+    return state, str(image)
+
+
 def memory_from_tracker(tracker, task_id: str, races: int = 1) -> Optional[dict[str, Any]]:
     """Lessons + winning skill from the latest closed races on this task, as stored by the tracker.
     Any other memory source (Memorable, GBrain) can return the same shape instead."""
@@ -200,19 +227,26 @@ def plan_strategies(task: dict[str, Any], n: int, *, state: Optional[dict] = Non
     system = SYSTEM.format(n=n, max_tries=task.get("max_attempts", 5), memory_rule=memory_rule)
     messages: list[dict[str, Any]] = [{"role": "user", "content": _user_content(task, n, state, image, memory)}]
 
-    plan, problems = None, []
-    for _ in range(max_repairs + 1):
-        resp = client.messages.create(model=model, max_tokens=4000, system=system, tools=[PLAN_TOOL],
-                                      tool_choice={"type": "tool", "name": "submit_plan"}, messages=messages)
-        block = next(b for b in resp.content if getattr(b, "type", None) == "tool_use")
+    # tool_choice "auto": Opus 5.5 / Fable 5.1 reject forced tool use (type "tool"/"any" -> 400), so the
+    # system prompt asks for submit_plan and a reply without the call gets one nudge.
+    plan, problems = {}, []
+    for _ in range(max_repairs + 2):
+        resp = client.messages.create(model=model, max_tokens=16000, system=system, tools=[PLAN_TOOL],
+                                      tool_choice={"type": "auto"}, messages=messages)
+        block = next((b for b in resp.content if getattr(b, "type", None) == "tool_use"), None)
+        if block is None:
+            problems = ["the planner replied without calling submit_plan"]
+            messages += [{"role": "assistant", "content": resp.content},
+                         {"role": "user", "content": "Call submit_plan now with the full plan."}]
+            continue
         plan = dict(block.input)
         problems = validate(plan, n, n_exploit)
         if not problems:
             break
-        messages += [{"role": "assistant", "content": resp.content},
-                     {"role": "user", "content": [{"type": "tool_result", "tool_use_id": block.id, "is_error": True,
-                                                   "content": "Fix these and call submit_plan again:\n- "
-                                                              + "\n- ".join(problems)}]}]
+        messages.append({"role": "assistant", "content": resp.content})
+        messages.append({"role": "user", "content": [{"type": "tool_result", "tool_use_id": block.id, "is_error": True,
+                                                      "content": "Fix these and call submit_plan again:\n- "
+                                                                 + "\n- ".join(problems)}]})
     strategies = [{"agent_id": f"agent-{i + 1}", **s} for i, s in enumerate(plan.get("strategies", [])[:n])]
     return {"task_id": task["task_id"], "axes": plan.get("axes", []), "strategies": strategies,
             "coverage_rationale": plan.get("coverage_rationale", ""), "model": model,
@@ -262,8 +296,19 @@ def register_plan(tracker, race_id: str, plan: dict[str, Any]) -> None:
 
 # -------------------------------------------------------------------- CLI ---
 
+def _tracker(url: Optional[str] = None):
+    try:
+        from racetrack.client import Tracker          # imported as a package (repo root on sys.path)
+    except ImportError:
+        from client import Tracker                    # run from inside racetrack/
+    return Tracker(url)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Plan distinct strategies for a race.")
+    ap.add_argument("--sim-task", help="robot_race task id (e.g. can_to_bin): task text + API_DOC + scene "
+                                          "from the sim; replaces --task-file/--api/--state/--image")
+    ap.add_argument("--seed", type=int, default=0, help="with --sim-task: seed of the scene shown to the planner")
     ap.add_argument("--task-file", help="JSON with description, success, robot_api, max_attempts")
     ap.add_argument("--task", help="task description (overrides the file's)")
     ap.add_argument("--api", help="file documenting the robot API, e.g. the sim's interfaces.py")
@@ -279,16 +324,25 @@ def main():
     ap.add_argument("--out", default="plan.json")
     args = ap.parse_args()
 
-    from client import Tracker
-    tracker = Tracker(args.url)
-    task = load_task(args.task_file, args.task, args.api)
-    state = json.loads(Path(args.state).read_text()) if args.state else None
+    tracker = _tracker(args.url)
+    client = None
+    if args.sim_task:
+        from robot_race.agent import _load_env, make_client
+        _load_env()
+        client = make_client()
+        task = sim_task(args.sim_task)
+        if args.task:
+            task["description"] = args.task
+        state, args.image = observe_sim(args.sim_task, args.seed, Path(args.out).resolve().parent)
+    else:
+        task = load_task(args.task_file, args.task, args.api)
+        state = json.loads(Path(args.state).read_text()) if args.state else None
     memory = (None if args.memory == "none" else
               memory_from_tracker(tracker, task["task_id"]) if args.memory == "tracker" else
               json.loads(Path(args.memory).read_text()))
 
     plan = plan_strategies(task, args.agents, state=state, image=args.image, memory=memory,
-                           n_exploit=args.exploit, model=args.model)
+                           n_exploit=args.exploit, model=args.model, client=client)
     if args.race:
         plan["race_id"] = tracker.start_race(label=args.race, task=task["task_id"],
                                              scoring={"max_attempts": task["max_attempts"]})

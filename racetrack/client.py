@@ -70,8 +70,25 @@ class Tracker:
             p = Path(result).resolve()
             data = json.loads(p.read_text())
             data.setdefault("result_dir", str(p.parent))
-            return data
-        return dict(result)
+        else:
+            data = dict(result)
+        return Tracker.normalize(data)
+
+    @staticmethod
+    def normalize(data: dict[str, Any]) -> dict[str, Any]:
+        """robot_race's result.json says energy_j and code_path (policy.py, relative to the attempt
+        dir); the tracker wants energy and the code text. Fill those in without overriding anything."""
+        if data.get("energy") is None and data.get("energy_j") is not None:
+            data["energy"] = data["energy_j"]
+        if not data.get("code") and data.get("code_path"):
+            p = Path(data["code_path"])
+            if not p.is_absolute() and data.get("result_dir"):
+                p = Path(data["result_dir"]) / p
+            try:
+                data["code"] = p.read_text()
+            except OSError:
+                pass
+        return data
 
     def record_attempt(self, race_id: str, agent_id: str, seed: int, attempt: int,
                        result: Union[dict[str, Any], str, Path], **extra: Any) -> bool:

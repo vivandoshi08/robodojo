@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -6,7 +7,7 @@ import pytest
 from planner import (load_strategy_prompt, load_task, memory_from_tracker, plan_strategies,
                      strategy_prompt, validate)
 
-TASK = load_task("tasks/can_to_bin.json")
+TASK = load_task(str(Path(__file__).with_name("tasks") / "can_to_bin.json"))
 AXES = [{"name": "grasp", "why_it_matters": "slip", "options": ["top-down", "side"]},
         {"name": "release", "why_it_matters": "bounce", "options": ["drop from height", "lower then open"]}]
 
@@ -43,7 +44,7 @@ def test_plan_assigns_agents_and_forces_the_tool():
     assert [s["agent_id"] for s in plan["strategies"]] == ["agent-1", "agent-2", "agent-3", "agent-4"]
     assert plan["warnings"] == [] and len(client.calls) == 1
     call = client.calls[0]
-    assert call["tool_choice"] == {"type": "tool", "name": "submit_plan"}
+    assert call["tool_choice"] == {"type": "auto"} and call["tools"][0]["name"] == "submit_plan"
     assert "no memory" in call["system"] and "4 robot agents" in call["system"]
     text = call["messages"][0]["content"][-1]["text"]
     assert "move_to" in text and "Pick up the can" in text        # task + API reach the model

@@ -1,5 +1,24 @@
 # racetrack: strategy planning, scoring, leaderboard and race-over-race tracking
 
+## Wired into robodojo (use this)
+
+```bash
+cd racetrack && uv run uvicorn server:app --port 8000     # tracker + dashboard (http://localhost:8000)
+uv run python run_race.py --task can_to_bin --agents 4 --seeds 0-2 --fast --label cold
+uv run python run_race.py --task can_to_bin --agents 4 --seeds 0-2 --fast --label warm   # plans from the cold race
+```
+
+- **Planner input** comes from the sim, not `tasks/*.json`: `planner.sim_task()` uses `TASKS[task]["text"]` and the
+  exact `API_DOC` the agents see; `observe_sim()` renders the same get_state() + front camera. Standalone:
+  `uv run python -m racetrack.planner --sim-task can_to_bin --agents 4 --out plan.json`.
+  (`tasks/can_to_bin.json` describes an older draft API; keep it for the unit tests only.)
+- **Planner model** (`RACE_PLANNER_MODEL`, default `claude-opus-5-5`) uses `tool_choice: auto`: Opus 5.5 rejects forced tool use.
+- **One racer** = `run_agent.py --plan plan.json --agent-id agent-N [--race-id ID]`: the strategy block goes in as the
+  strategy card (recorded hint), `summary.json["race"]` names race/agent/strategy, and every attempt is sent to the
+  tracker through `run_agent_loop(on_attempt=...)`. A down tracker never stops a run (`runs_backup.jsonl`).
+- **result.json mapping**: `Tracker.normalize()` fills `energy` from `energy_j` and `code` from `code_path` (policy.py).
+- **Outputs**: `races/<race_id>/` (plan.json, race.json, close.json with lessons + winning skill, one log per racer).
+
 This folder adds race planning and tracking on top of the Phase 1 loop. It never touches `interfaces.py`, the sim, `check_success()`, the executor or the agent loop. It reads the `result.json` the executor already writes, exactly as the plan freezes it:
 
 ```

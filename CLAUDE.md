@@ -42,7 +42,9 @@ policies/reference_pick_and_drop.py  DONE  scripted top-down grasp -> carry -> r
 scripts/fetch_assets.sh              DONE
 scripts/check_reference.py           DONE  reference policy x 5 tasks x 10 seeds, no video (~1 min)
 run_policy.py     DONE   CLI: run a policy file on N seeds in parallel
-run_agent.py      DONE   CLI: run the agent loop
+run_agent.py      DONE   CLI: run the agent loop (--plan/--agent-id: one racer from a racetrack plan)
+run_race.py       DONE   CLI: racetrack planner -> N agent loops x seeds -> tracker leaderboard + lessons
+racetrack/        DONE   LLM strategy planner, tracker server/dashboard, scoring (see racetrack/README.md)
 ```
 
 ## 3. Contracts (don't change without the team)
