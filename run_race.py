@@ -118,6 +118,28 @@ def local_ranking(rows: list[dict]) -> list[dict]:
     return [{**b, "rank": i + 1} for i, b in enumerate(ranked)]
 
 
+def render_winner(rows: list[dict], winner_id: str | None, runs_dir: str) -> str | None:
+    """Background mp4 of the winner's solving attempt (races run --fast, so no mp4 exists yet).
+    Detached `python -m robot_race.replay` at the executor's 640x480 @ 30; fail-open."""
+    solved = [r for r in rows if r["status"] == "solved" and r.get("solved_at")]
+    pick = next((r for r in solved if r["agent_id"] == winner_id), None) or (solved[0] if solved else None)
+    if not pick:
+        return None
+    adir = Path(runs_dir) / pick["run_id"] / f"attempt_{pick['solved_at']}"
+    if not (adir / "trajectory.npz").exists() or (adir / "attempt.mp4").exists():
+        return None
+    try:
+        with (adir / ".render.log").open("w") as log:
+            subprocess.Popen([sys.executable, "-m", "robot_race.replay", str(adir), "--width", "640",
+                              "--height", "480", "--fps", "30"], cwd=REPO, stdout=log, stderr=subprocess.STDOUT,
+                             stdin=subprocess.DEVNULL, start_new_session=True)
+    except OSError as e:
+        print(f"render: could not start replay for {adir}: {e}")
+        return None
+    print(f"render: winner video -> {adir / 'attempt.mp4'} (background)")
+    return str(adir)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--task", default="can_to_bin", choices=list(TASKS))
@@ -228,6 +250,10 @@ def main(argv=None) -> int:
         print(f"\nranking {race_id} (local, no tracker):")
         for b in race["local_ranking"]:
             print(f"  #{b['rank']} {b['agent_id']} {b['strategy']}: solved {b['solved']}/{b['seeds']}")
+    if a.fast:
+        win = ((out or {}).get("winner") or {}).get("agent_id") if up else None
+        render_winner(rows, win or (race["local_ranking"][0]["agent_id"] if race["local_ranking"] else None),
+                      a.runs_dir)
     if a.brain:
         memory["stored"] = {"episodes": sum(r["attempts"] for r in rows),
                             "store": str(memory_hooks.recorder().settings.store_root)}

@@ -125,7 +125,7 @@ button:active{transform:translateY(1px)}
 @media (max-width:900px){.main{grid-template-columns:1fr}}
 
 /* ---- blueprint mats, floating in glass ---- */
-.mats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.mats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start;align-content:start}
 @media (max-width:620px){.mats{grid-template-columns:1fr}}
 .mat{position:relative;padding:16px 18px 14px;color:var(--ink);border-radius:var(--r);
   background:var(--glass);border:1px solid var(--glass-brd);
@@ -391,6 +391,74 @@ body.live .demo-only{display:none!important}
   background:rgba(0,0,0,.28);border-radius:8px}
 .scroll p.md-p{margin:0;color:var(--ink-soft)}
 .lesson{display:block;margin-top:6px;color:var(--ink-soft);font-size:12.5px}
+
+/* ---------- run detail (click a mat or a journal row) ---------- */
+.mat.clickable,.entry.clickable{cursor:pointer}
+.tries{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 0}
+.tries button{font:500 11px/1 var(--mono);padding:5px 8px;border-radius:99px;border:1px solid var(--glass-brd);background:var(--card);color:var(--ink-soft);cursor:pointer}
+.tries button.ok{color:#04220F;background:var(--hit);border-color:transparent}
+.tries button.bad{color:var(--miss);border-color:color-mix(in srgb,var(--miss) 45%,transparent)}
+.tries button.run{color:var(--riso);border-color:color-mix(in srgb,var(--riso) 55%,transparent)}
+.mat .open-hint{position:relative;z-index:1;margin:6px 0 0;font:500 11px/1 var(--mono);letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-soft);opacity:.75}
+.mat:hover .open-hint{color:var(--riso);opacity:1}
+.rd-veil{position:fixed;inset:0;z-index:60;background:rgba(3,5,12,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 16px}
+.rd-veil[hidden]{display:none}
+.rd{position:relative;width:min(1180px,100%);background:rgba(10,15,34,.96);border:1px solid var(--glass-brd-lit);
+  border-radius:var(--r);box-shadow:var(--glass-hi),0 40px 90px -30px #000;color:var(--ink);padding:22px 24px 26px}
+.rd-close{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:99px;border:1px solid var(--glass-brd);
+  background:var(--card);color:var(--ink);font-size:18px;cursor:pointer}
+.rd-close:hover{border-color:var(--glass-brd-lit)}
+.rd h2{font-family:var(--display);font-weight:400;font-size:34px;margin:0 44px 2px 0;letter-spacing:-.01em}
+.rd .sub{color:var(--ink-soft);font-size:13px;margin:0 0 10px}
+.rd .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.rd .chip{font:500 11px/1 var(--mono);padding:5px 9px;border-radius:99px;border:1px solid var(--glass-brd);color:var(--ink-soft);background:var(--card)}
+.rd .chip.ok{color:#04220F;background:var(--hit);border-color:transparent}
+.rd .chip.bad{color:#2A0710;background:var(--miss);border-color:transparent}
+.rd .chip.gold{color:#2A1B00;background:var(--gold);border-color:transparent}
+.rd .banner{margin:8px 0;padding:8px 12px;border-radius:10px;border:1px solid color-mix(in srgb,var(--gold) 55%,transparent);
+  background:color-mix(in srgb,var(--gold) 12%,transparent);color:var(--gold);font-size:12.5px}
+.rd .approach{font-size:14px;line-height:1.5;color:var(--ink);margin:6px 0}
+.rd dl.choices{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;margin:6px 0 0;font-size:12.5px}
+.rd dl.choices dt{color:var(--ink-soft)}.rd dl.choices dd{margin:0}
+.rd-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px;margin-top:14px}
+@media (max-width:900px){.rd-grid{grid-template-columns:1fr}}
+.rd-player{position:relative;border-radius:12px;overflow:hidden;background:var(--bp);border:1px solid var(--glass-brd);aspect-ratio:4/3}
+.rd-player video,.rd-player img{display:block;width:100%;height:100%;object-fit:contain;background:var(--bp)}
+.rd-player .state{position:absolute;left:10px;bottom:10px;padding:4px 10px;border-radius:99px;font:500 11px/1.2 var(--mono);
+  background:rgba(5,7,15,.8);border:1px solid var(--glass-brd);color:var(--ink)}
+.rd-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px}
+.rd-tabs button{font:500 12px/1 var(--body);padding:7px 12px;border-radius:99px;border:1px solid var(--glass-brd);background:var(--card);color:var(--ink);cursor:pointer}
+.rd-tabs button[aria-pressed="true"]{background:var(--riso);color:#050A1F;border-color:transparent}
+.rd-tabs button.ok::after{content:" ✓";color:var(--hit)}.rd-tabs button.bad::after{content:" ✗";color:var(--miss)}
+.rd-tabs button[aria-pressed="true"].ok::after,.rd-tabs button[aria-pressed="true"].bad::after{color:#050A1F}
+.rd-metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin:10px 0}
+.rd-metrics div{padding:8px 10px;border-radius:10px;background:var(--card);border:1px solid var(--glass-brd)}
+.rd-metrics b{display:block;font:600 16px/1.2 var(--mono);color:var(--ink)}
+.rd-metrics span{font-size:11px;color:var(--ink-soft)}
+.rd-frames{display:flex;gap:6px;margin:8px 0;overflow-x:auto}
+.rd-frames img{width:120px;border-radius:8px;border:1px solid var(--glass-brd);cursor:pointer}
+.rd h3{font-family:var(--display);font-weight:400;font-size:21px;margin:16px 0 6px}
+.rd pre{margin:0;padding:12px;border-radius:10px;background:#040713;border:1px solid var(--glass-brd);color:#DCE3FF;
+  font:12px/1.5 var(--mono);white-space:pre;overflow:auto;max-height:420px}
+.rd pre.wrap{white-space:pre-wrap}
+.rd .err{color:var(--miss);white-space:pre-wrap;font:12px/1.45 var(--mono);margin:6px 0}
+.rd details{margin:8px 0}.rd summary{cursor:pointer;color:var(--riso);font-size:13px}
+.rd .row-actions{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}
+.rd .row-actions a,.rd .row-actions button{font:500 12px/1 var(--body);padding:7px 12px;border-radius:99px;border:1px solid var(--glass-brd);
+  background:var(--card);color:var(--ink);cursor:pointer;text-decoration:none}
+.rd .row-actions a:hover,.rd .row-actions button:hover{border-color:var(--glass-brd-lit)}
+.rd table.calls{width:100%;border-collapse:collapse;font:12px/1.35 var(--mono)}
+.rd table.calls td,.rd table.calls th{padding:5px 8px;border-bottom:1px solid var(--glass-brd);text-align:left;vertical-align:top}
+.rd table.calls th{color:var(--ink-soft);font-weight:500}
+.rd table.calls tr.seek{cursor:pointer}.rd table.calls tr.seek:hover td{background:var(--wash)}
+.rd table.calls tr.now td{background:color-mix(in srgb,var(--riso) 22%,transparent)}
+.rd table.calls tr.bad td{color:var(--miss)}
+.rd .calls-wrap{max-height:360px;overflow:auto;border-radius:10px;border:1px solid var(--glass-brd)}
+.rd .score-card{padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--glass-brd)}
+.rd .score-card .big{font:600 30px/1 var(--mono)}
+.rd .note{color:var(--ink-soft);font-size:12.5px;margin:6px 0}
 </style>
 </head>
 <body>
@@ -426,7 +494,7 @@ body.live .demo-only{display:none!important}
         <label>Task <select id="fTask" aria-label="Task"></select></label>
         <label>Agents <input id="fAgents" type="number" min="1" max="6" value="4" aria-label="Agents"></label>
         <label>Seeds <input id="fSeeds" value="0" size="5" aria-label="Seeds, e.g. 0-2"></label>
-        <label>Tries <input id="fTries" type="number" min="1" max="5" value="5" aria-label="Tries per seed"></label>
+        <label>Tries <input id="fTries" type="number" min="1" max="5" value="3" aria-label="Tries per seed"></label>
         <label>Run on <select id="fBackend" aria-label="Where racers run"><option value="local">Local sim</option><option value="qm">QM sandboxes</option></select></label>
         <label>Label <input id="fLabel" value="" size="7" placeholder="cold" aria-label="Race label"></label>
       </form>
@@ -471,6 +539,13 @@ body.live .demo-only{display:none!important}
       <div class="belts" id="belts"></div>
     </div>
   </section>
+</div>
+
+<div class="rd-veil" id="rdVeil" hidden>
+  <div class="rd" role="dialog" aria-modal="true" aria-labelledby="rdTitle">
+    <button type="button" class="rd-close" id="rdClose" aria-label="Close run detail">×</button>
+    <div id="rdBody"></div>
+  </div>
 </div>
 
 <script>
@@ -908,17 +983,20 @@ function agentsOf(d){
 function buildMats(agents){
   mats={};matsEl.innerHTML='';
   agents.forEach((a,i)=>{
-    const el=document.createElement('article');el.className='mat';
+    const el=document.createElement('article');el.className='mat clickable';el.dataset.agent=a.id;
+    el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',`Open run detail for ${a.name}`);
     const pal=PAL[i%PAL.length];el.style.setProperty('--s',`var(--s-${pal})`);
     el.innerHTML=`<span class="crown">Race winner</span>
     <div class="mat-head"><h2>${esc(a.name)}</h2><span class="belt"><i style="background:var(--s-${pal})"></i><span>${esc(a.id)}${a.mode?' · '+esc(a.mode):''}</span></span></div>
     <p class="desc" title="${esc(a.desc)}">${esc(a.desc)}</p>
     <div class="screen"><span class="screen-tag">Waiting</span><div class="idle">waiting for first attempt</div></div>
     <p class="caption">Waiting on the mat</p>
-    <div class="stats"><span><b data-in>0/0</b>solved</span><span><b data-time>–</b>s avg</span><span><b data-tries>0</b>tries</span></div>`;
+    <div class="stats"><span><b data-in>0/0</b>solved</span><span><b data-time>–</b>s avg</span><span><b data-tries>0</b>tries</span></div>
+    <div class="tries" data-tries-strip></div>
+    <p class="open-hint">Open full run ›</p>`;
     matsEl.appendChild(el);
     mats[a.id]={a,pal,el,screen:el.querySelector('.screen'),tag:el.querySelector('.screen-tag'),caption:el.querySelector('.caption'),
-      in:el.querySelector('[data-in]'),time:el.querySelector('[data-time]'),tries:el.querySelector('[data-tries]'),src:null,frames:null};
+      in:el.querySelector('[data-in]'),time:el.querySelector('[data-time]'),tries:el.querySelector('[data-tries]'),strip:el.querySelector('[data-tries-strip]'),src:null,frames:null};
   });
 }
 function mediaOf(run){
@@ -960,8 +1038,9 @@ async function pollEvents(run){
 }
 
 /* ---------- QM workers (backend=qm): shape from qm.launch.qm_status, matched loosely ---------- */
+const isQM=d=>!!(d&&d.launch&&d.launch.backend==='qm');
 function qmWorker(a){
-  if(!qm||!qm.available||!qm.workers)return null;
+  if(!isQM(data)||!qm||!qm.available||!qm.workers)return null;
   const w=Array.isArray(qm.workers)?qm.workers.find(x=>[x.agent_id,x.strategy,x.name].includes(a.id)):qm.workers[a.id];
   return w?{...w,status:w.status||(w.solved?'solved':w.attempts?`try ${w.attempts}`:'waiting')}:null;
 }
@@ -970,8 +1049,7 @@ function qmMessage(launch){const q=launch&&launch.qm;return q&&q.status==='manua
 let qmProbed=null;
 async function pollQM(){
   if(!raceId)return;
-  const probe=qmProbed!==raceId;qmProbed=raceId;  // one probe per race, then only while QM answers
-  if(!probe&&backend!=='qm'&&!(qm&&qm.available))return;
+  if(!isQM(data)){qm=null;return}  // local races never show QM state
   try{qm=await getJSON(`/api/races/${encodeURIComponent(raceId)}/qm`)}catch{qm=null}
 }
 
@@ -1006,10 +1084,13 @@ async function render(d){
     const s=sc.find(x=>x.agent_id===a.id)||{};
     m.in.textContent=`${s.solved??0}/${s.seeds??rs.length}`;m.time.textContent=num(s.time);m.tries.textContent=rs.reduce((n,r)=>n+r.attempts.length,0);
     m.el.classList.toggle('champion',winner===a.id);
-    const w=qmWorker(a);
-    if(w)m.tag.textContent=`QM · ${w.status||w.state||'worker'}`;
-    if(!focus){if(w)m.caption.textContent=`QM sandbox ${w.sandbox||w.container||w.id||''}: ${w.status||w.state||'starting'}`;continue}
-    showMedia(m,mediaOf(focus));if(w)m.tag.textContent=`QM · ${w.status||w.state||'worker'} · `+m.tag.textContent;
+    const w=qmWorker(a), where=isQM(d)?'QM':'Local';
+    m.strip.innerHTML=rs.flatMap(r=>r.attempts.map(x=>`<button type="button" data-run="${esc(r.run_id)}" data-seed="${esc(r.seed)}" data-k="${x.k}" class="${x.success?'ok':'bad'}" title="Seed ${esc(r.seed)}, try ${x.k}: ${x.success?'in the bin':'missed'}">${rs.length>1?`S${esc(r.seed)} `:''}T${x.k} ${x.success?'✓':'✗'}</button>`)
+      .concat(r.current_attempt?[`<button type="button" data-run="${esc(r.run_id)}" data-seed="${esc(r.seed)}" data-k="${r.current_attempt}" class="run">${rs.length>1?`S${esc(r.seed)} `:''}T${r.current_attempt} …</button>`]:[])).join('')
+      +(!rs.length?(d.attempts||[]).filter(t=>t.agent_id===a.id).map(t=>`<button type="button" data-seed="${esc(t.seed)}" data-k="${t.attempt}" class="${t.success?'ok':'bad'}">S${esc(t.seed)} T${t.attempt} ${t.success?'✓':'✗'}</button>`).join(''):'');
+    if(!focus){m.tag.textContent=w?`QM · ${w.status||w.state||'worker'}`:`${where} · waiting`;
+      if(w)m.caption.textContent=`QM sandbox ${w.sandbox||w.container||w.id||''}: ${w.status||w.state||'starting'}`;continue}
+    const md=mediaOf(focus);showMedia(m,md);m.tag.textContent=(w?`QM · ${w.status||w.state||'worker'}`:where)+' · '+(md?md.tag:'starting');
     const cap=await pollEvents(focus);if(cap)m.caption.textContent=cap;
     const prev=m.lastDone, done=focus.attempts.length;
     if(prev!=null&&done>prev){const ok=focus.attempts[done-1].success;m.el.classList.add(ok?'hit':'miss');setTimeout(()=>m.el.classList.remove('hit','miss'),700)}
@@ -1022,7 +1103,10 @@ async function render(d){
   else if(!launchId){const done=d.runs.filter(r=>r.status!=='running').length;
     verdict.textContent=d.runs.length?`Racing: ${done} of ${d.runs.length} racers finished.`:qmMessage(d.launch)}
   renderJournal(d,agents);renderContext(d);
+  const hm=!deepLinked&&location.hash.match(/^#detail=([\w.-]+)(?:\/(\d+))?/);   // #detail=agent-2[/<try>]
+  if(hm&&agents.find(a=>a.id===hm[1])){deepLinked=true;openDetail({agent:hm[1],k:hm[2]?+hm[2]:null})}
 }
+let deepLinked=false;
 
 /* ---------- journal: every attempt, with tracker failure modes + memory tags ---------- */
 function renderFilter(agents){
@@ -1056,7 +1140,7 @@ function renderJournal(d,agents){
   journal.innerHTML=rows.slice(0,120).map(({run,ag,a,at,fm})=>{
     const pal=(mats[ag]||{}).pal||'place';
     const recall=at.k===1&&run.hints&&run.hints.context?'<span class="recall">Started with recalled memory (GBrain skill + Memorable)</span>':'';
-    return `<div class="entry ${at.success?'ok':'bad'}" style="--s:var(--s-${pal})"><span class="mark" aria-label="${at.success?'Hit':'Miss'}">${at.success?'✓':'✗'}</span><div><span class="who">${esc(a.name)}</span><span class="rnd">S${run.seed} T${at.k}</span><br><span class="why">${esc(reason(at,fm))}</span>${recall}</div></div>`;
+    return `<div class="entry clickable ${at.success?'ok':'bad'}" style="--s:var(--s-${pal})" data-agent="${esc(ag)}" data-run="${esc(run.run_id||'')}" data-seed="${esc(run.seed)}" data-k="${esc(at.k)}" tabindex="0" role="button"><span class="mark" aria-label="${at.success?'Hit':'Miss'}">${at.success?'✓':'✗'}</span><div><span class="who">${esc(a.name)}</span><span class="rnd">S${run.seed} T${at.k}</span><br><span class="why">${esc(reason(at,fm))}</span>${recall}</div></div>`;
   }).join('');
 }
 async function renderContext(d){
@@ -1108,6 +1192,195 @@ function renderHistory(list){
       <p style="font-family:var(--mono);font-size:10.5px">${esc(r.race_id)}</p></div>`}).join('');
 }
 
+
+/* ---------- run detail: click a mat or a journal row ---------- */
+const veil=$('rdVeil'), rdBody=$('rdBody');
+let rd=null;   // {agent, runId, seed, k, summary, timer}
+function closeDetail(){if(rd&&rd.timer)clearTimeout(rd.timer);rd=null;veil.hidden=true;rdBody.innerHTML='';document.body.style.overflow=''}
+$('rdClose').addEventListener('click',closeDetail);
+veil.addEventListener('click',e=>{if(e.target===veil)closeDetail()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!veil.hidden)closeDetail()});
+matsEl.addEventListener('click',e=>{const t=e.target.closest('.tries button[data-k]');const m=e.target.closest('.mat[data-agent]');
+  if(t&&m)return openDetail({agent:m.dataset.agent,runId:t.dataset.run,seed:+t.dataset.seed,k:+t.dataset.k});
+  if(m)openDetail({agent:m.dataset.agent})});
+matsEl.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.mat[data-agent]')){e.preventDefault();openDetail({agent:e.target.dataset.agent})}});
+journal.addEventListener('click',e=>{const r=e.target.closest('.entry[data-agent]');if(r)openDetail({agent:r.dataset.agent,runId:r.dataset.run||null,seed:+r.dataset.seed,k:+r.dataset.k})});
+journal.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('.entry[data-agent]'))e.target.click()});
+
+const sfx=v=>v==null?'–':v;
+function stratCard(sc){
+  if(!sc)return '';
+  const ch=sc.choices&&Object.keys(sc.choices).length?`<dl class="choices">${Object.entries(sc.choices).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`:'';
+  const params=sc.starting_parameters&&Object.keys(sc.starting_parameters).length?`<p class="note">Starting parameters: ${esc(Object.entries(sc.starting_parameters).map(([k,v])=>`${k}=${v}`).join(', '))}</p>`:'';
+  return `${sc.approach?`<p class="approach">${esc(sc.approach)}</p>`:''}${ch}${params}${sc.risks?`<p class="note">Risk: ${esc(Array.isArray(sc.risks)?sc.risks.join('; '):sc.risks)}</p>`:''}${sc.builds_on?`<p class="note">Builds on: ${esc(Array.isArray(sc.builds_on)?sc.builds_on.join(', '):sc.builds_on)}</p>`:''}`;
+}
+async function openDetail(o){
+  if(!data)return;
+  if(rd&&rd.timer)clearTimeout(rd.timer);
+  const runs=data.runs.filter(r=>(r.race||{}).agent_id===o.agent).sort((a,b)=>(a.seed||0)-(b.seed||0));
+  let run=o.runId?runs.find(r=>r.run_id===o.runId):null;
+  if(!run&&o.seed!=null&&!isNaN(o.seed))run=runs.find(r=>r.seed===o.seed);
+  if(!run)run=runs.find(r=>r.status==='running')||runs.find(r=>r.status==='solved')||runs[0];
+  rd={agent:o.agent,runId:run?run.run_id:null,seed:run?run.seed:(isNaN(o.seed)?null:o.seed),k:o.k||null,summary:null,timer:null};
+  veil.hidden=false;document.body.style.overflow='hidden';
+  rdBody.innerHTML='<p class="note">Loading run…</p>';
+  if(run){try{rd.summary=await getJSON(`/api/runs/${encodeURIComponent(run.run_id)}`)}catch(err){rd.summary=null}}
+  if(!rd)return;
+  if(!rd.k){const s=rd.summary;rd.k=s&&s.solved_at?s.solved_at:(s&&s.attempts&&s.attempts.length)||1}
+  drawDetail();
+}
+function drawDetail(){
+  if(!rd)return;
+  const d=data, ag=rd.agent, s=rd.summary;
+  const plan=((d.plan&&d.plan.strategies)||[]).find(x=>x.agent_id===ag)||{};
+  const name=plan.name||(s&&s.race&&s.race.strategy_name)||ag;
+  const mode=plan.mode||(s&&s.race&&s.race.mode)||'';
+  const lb=(d.leaderboard&&d.leaderboard.scores)||[]; const row=lb.find(x=>x.agent_id===ag);
+  const rank=row?(row.rank||lb.indexOf(row)+1):null;
+  const winner=(d.close&&d.close.winner&&d.close.winner.agent_id)||(d.leaderboard&&d.leaderboard.winner&&(d.leaderboard.winner.agent_id||d.leaderboard.winner));
+  const runs=d.runs.filter(r=>(r.race||{}).agent_id===ag).sort((a,b)=>(a.seed||0)-(b.seed||0));
+  const trk=(d.attempts||[]).filter(a=>a.agent_id===ag);
+  const hints=(s&&s.hints)||{};
+  const banners=[];
+  if(s&&s.scripted)banners.push('SCRIPTED DEMO, NOT A MODEL');
+  if(hints.example)banners.push('Hint given: reference example in prompt');
+  if(hints.strategy)banners.push(mode==='custom'?'Hint given: your strategy (custom card) in prompt':'Hint given: planner strategy card in prompt');
+  if(hints.context)banners.push('Hint given: recalled memory (GBrain skill + Memorable) in prompt');
+  const status=s?s.status:(trk.some(a=>a.success)?'solved':trk.length?'attempted':'waiting');
+  let h=`<h2 id="rdTitle">${esc(name)}</h2>
+  <p class="sub">${esc(ag)} · race ${esc(d.race_id)}${rd.seed!=null?` · seed ${esc(rd.seed)}`:''}${s&&s.model?` · ${esc(s.model)}`:''}${rd.runId?` · <span style="font-family:var(--mono)">${esc(rd.runId)}</span>`:''}</p>
+  <div class="chips">${mode?`<span class="chip">${esc(mode)}</span>`:''}${mode==='custom'?'<span class="chip gold">your strategy</span>':''}
+    <span class="chip ${status==='solved'?'ok':status==='failed'||status==='error'?'bad':''}">${esc(status)}${s&&s.solved_at?` at try ${s.solved_at}`:''}</span>
+    ${winner===ag?'<span class="chip gold">race winner</span>':''}${rank?`<span class="chip">rank #${rank}</span>`:''}</div>
+  ${banners.map(b=>`<div class="banner">${esc(b)}</div>`).join('')}
+  ${stratCard(plan)}`;
+  if(runs.length>1)h+=`<div class="rd-tabs" data-role="seeds">${runs.map(r=>`<button type="button" data-run="${esc(r.run_id)}" aria-pressed="${r.run_id===rd.runId}" class="${r.status==='solved'?'ok':r.status==='running'?'':'bad'}">Seed ${esc(r.seed)}</button>`).join('')}</div>`;
+  // attempts: local summary, else tracker (QM runs live in sandboxes)
+  const atts=s&&s.attempts&&s.attempts.length?s.attempts.map(a=>({k:a.k,r:a.result||{},code:a.code})):
+    trk.filter(a=>rd.seed==null||a.seed===rd.seed).sort((a,b)=>a.attempt-b.attempt).map(a=>({k:a.attempt,r:a,code:a.code,trk:true}));
+  const cur=atts.find(a=>a.k===rd.k)||atts[atts.length-1];
+  if(cur)rd.k=cur.k;
+  h+=atts.length?`<div class="rd-tabs" data-role="attempts">${atts.map(a=>`<button type="button" data-k="${a.k}" aria-pressed="${a.k===rd.k}" class="${a.r.success?'ok':'bad'}">Try ${a.k}</button>`).join('')}${s&&s.status==='running'?`<button type="button" disabled>Try ${atts.length+1} running…</button>`:''}</div>`
+    :`<p class="note">${s&&s.status==='running'?'First attempt is running: the model is writing run(robot).':'No attempts recorded yet.'}</p>`;
+  h+=`<div class="rd-grid"><div>
+      <div class="rd-player" id="rdPlayer"><div class="state">${cur?'Loading video…':'Waiting'}</div></div>
+      <div class="rd-frames" id="rdFrames"></div>
+      <div class="row-actions">${rd.runId?`<a href="/${encodeURIComponent(rd.runId)}/trace.html" target="_blank" rel="noopener">Full audit trace ↗</a><a href="/${encodeURIComponent(rd.runId)}/index.html" target="_blank" rel="noopener">Run gallery ↗</a>`:''}${cur&&rd.runId?`<a href="/${encodeURIComponent(rd.runId)}/attempt_${cur.k}/" target="_blank" rel="noopener">Attempt files ↗</a>`:''}</div>
+    </div><div>
+      ${scoreCard(row,rank)}
+      ${memoryBlock(hints,d)}
+    </div></div>
+    <div id="rdAttempt"></div>`;
+  rdBody.innerHTML=h;
+  rdBody.querySelectorAll('[data-role="seeds"] button').forEach(b=>b.addEventListener('click',()=>{const r=runs.find(x=>x.run_id===b.dataset.run);openDetail({agent:ag,runId:b.dataset.run,seed:r&&r.seed})}));
+  rdBody.querySelectorAll('[data-role="attempts"] button[data-k]').forEach(b=>b.addEventListener('click',()=>{rd.k=+b.dataset.k;if(rd.timer)clearTimeout(rd.timer);drawDetail()}));
+  const ctxBtn=rdBody.querySelector('[data-act="ctx"]');
+  if(ctxBtn)ctxBtn.addEventListener('click',()=>{const p=rdBody.querySelector('#rdCtx');p.hidden=!p.hidden;ctxBtn.textContent=p.hidden?'Show what was recalled':'Hide recalled context'});
+  if(cur)drawAttempt(cur,trk.find(a=>a.seed===rd.seed&&a.attempt===cur.k)||(cur.trk?cur.r:null));
+}
+function scoreCard(row,rank){
+  if(!row)return `<div class="score-card"><p class="note">No tracker score yet${data.tracker?'':' (tracker not reachable)'}: the leaderboard fills in as attempts land.</p></div>`;
+  const bd=row.score_breakdown?Object.entries(row.score_breakdown).map(([k,v])=>`${k} ${(+v).toFixed(1)}`).join(' · '):'';
+  const fm=row.failure_modes&&Object.keys(row.failure_modes).length?Object.entries(row.failure_modes).map(([k,v])=>`${k.replace(/_/g,' ')} ×${v}`).join(', '):'none';
+  return `<div class="score-card"><span class="note">Race score${rank?` · rank #${rank}`:''}</span><div class="big">${(+row.score).toFixed(1)}</div>
+    <div class="rd-metrics"><div><b>${row.seeds_solved}/${row.seeds_target}</b><span>seeds solved</span></div>
+      <div><b>${Math.round((row.first_try_rate||0)*100)}%</b><span>first try</span></div>
+      <div><b>${row.mean_tries_to_solve!=null?num(row.mean_tries_to_solve):'–'}</b><span>tries to solve</span></div>
+      <div><b>${row.mean_time_s!=null?num(row.mean_time_s)+' s':'–'}</b><span>mean time</span></div>
+      <div><b>${num(row.collisions_per_seed)}</b><span>collisions / seed</span></div>
+      <div><b>${row.attempts_total}</b><span>attempts</span></div></div>
+    ${bd?`<p class="note">Breakdown: ${esc(bd)}</p>`:''}<p class="note">Failure modes: ${esc(fm)}</p></div>`;
+}
+function memoryBlock(hints,d){
+  if(!hints.context&&!d.context)return '';
+  return `<h3>Memory</h3><p class="note">${hints.context?'This racer started with recalled memory: the GBrain skill, a gbrain think synthesis of past races and Memorable episodes.':'This race recalled memory, but this run did not record it in its prompt.'}</p>
+    ${d.context?`<div class="row-actions"><button type="button" data-act="ctx">Show what was recalled</button></div><pre class="wrap" id="rdCtx" hidden>${esc(d.context)}</pre>`:''}`;
+}
+async function drawAttempt(cur,t){
+  const r=cur.r||{}, box=rdBody.querySelector('#rdAttempt'), local=!cur.trk&&rd.runId;
+  const base=local?`/${encodeURIComponent(rd.runId)}/attempt_${cur.k}/`:null;
+  const pos=r.item_final_pos?r.item_final_pos.map(v=>(+v).toFixed(3)).join(', '):'–';
+  let h=`<h3>Try ${cur.k}: ${r.success?'in the bin':'missed'}</h3>
+  <div class="rd-metrics">
+    <div><b style="color:var(${r.success?'--hit':'--miss'})">${r.success?'yes':'no'}</b><span>success</span></div>
+    <div><b>${r.time_s!=null?num(r.time_s)+' s':'–'}</b><span>time</span></div>
+    <div><b>${sfx(r.collisions)}</b><span>collisions</span></div>
+    <div><b>${r.energy_j!=null?num(r.energy_j)+' J':r.energy!=null?num(r.energy)+' J':'–'}</b><span>energy</span></div>
+    <div><b>${r.lifted==null?'–':r.lifted?'yes':'no'}</b><span>lifted</span></div>
+    <div><b>${r.dropped==null?'–':r.dropped?'yes':'no'}</b><span>dropped</span></div>
+    <div><b style="font-size:12px">${esc(pos)}</b><span>item final xyz (m)</span></div>
+    ${t&&t.failure_mode?`<div><b style="font-size:13px">${esc(t.failure_mode.replace(/_/g,' '))}</b><span>tracker failure mode</span></div>`:''}
+    ${t&&t.landing_error_m!=null?`<div><b>${num(t.landing_error_m*100)} cm</b><span>landing error</span></div>`:''}
+    ${r.wall_s!=null?`<div><b>${num(r.wall_s)} s</b><span>wall clock</span></div>`:''}
+  </div>
+  ${r.error?`<div class="err">${esc(String(r.error).slice(0,1500))}</div>`:''}
+  <h3>Timeline of robot calls</h3><div class="calls-wrap" id="rdCalls"><p class="note" style="padding:8px">${local?'Loading calls…':'Call timeline is in calls.json, which stays in the QM sandbox until qm/finish_race.sh collects the run.'}</p></div>
+  <h3>Code that ran</h3><div class="row-actions"><button type="button" data-act="copy">Copy code</button></div>
+  <pre id="rdCode">${esc(cur.code||'(code not recorded)')}</pre>
+  ${local?`<details id="rdReason"><summary>The model's full reply (reasoning + code)</summary><pre class="wrap">Loading…</pre></details>`:''}`;
+  box.innerHTML=h;
+  box.querySelector('[data-act="copy"]').addEventListener('click',e=>{navigator.clipboard&&navigator.clipboard.writeText(cur.code||'').then(()=>{e.target.textContent='Copied'},()=>{e.target.textContent='Copy failed'})});
+  const rs=box.querySelector('#rdReason');
+  if(rs)rs.addEventListener('toggle',async()=>{if(!rs.open||rs.dataset.done)return;rs.dataset.done=1;
+    try{const t=await fetch(base+'response.md',{cache:'no-store'});rs.querySelector('pre').textContent=t.ok?await t.text():'(no reply saved)'}catch{rs.querySelector('pre').textContent='(could not load)'}});
+  // media
+  const player=rdBody.querySelector('#rdPlayer'), frames=rdBody.querySelector('#rdFrames');
+  const m=r.media||{};
+  if(local){
+    const kf=(m.keyframes||[]).map(f=>base+f);
+    frames.innerHTML=kf.map((f,i)=>`<img src="${f}" alt="Key frame ${i+1} of try ${cur.k}" data-i="${i}">`).join('');
+    frames.querySelectorAll('img').forEach(img=>img.addEventListener('click',()=>{const v=player.querySelector('video');if(!v)return;const T=v.duration||0;v.currentTime=T*(+img.dataset.i)/Math.max(1,kf.length-1)}));
+    playVideo(base,m,cur.k);
+    loadCalls(base);
+  }else if(t){
+    const src=`/api/races/${encodeURIComponent(data.race_id)}/attempts/${encodeURIComponent(t.agent_id)}/${t.seed}/${t.attempt}/media/`;
+    if(t.video){player.innerHTML=`<video controls playsinline src="${src}video"></video>`}
+    else if(t.frames&&t.frames.length){player.innerHTML=`<img src="${src}frame${t.frames.length-1}" alt="Final frame"><div class="state">Key frames from the tracker</div>`;
+      frames.innerHTML=t.frames.map((f,i)=>`<img src="${src}frame${i}" alt="Key frame ${i+1}">`).join('')}
+    else player.innerHTML='<div class="state">This attempt ran in a QM sandbox. The video appears after qm/finish_race.sh collects the run.</div>';
+  }
+}
+function setPlayer(html){const p=rdBody.querySelector('#rdPlayer');if(p)p.innerHTML=html;return p}
+async function playVideo(base,m,k){
+  const key=`${rd.runId}|${k}`, poster=m.poster?base+m.poster:'';
+  const show=()=>{const p=setPlayer(`<video controls playsinline preload="auto" ${poster?`poster="${poster}"`:''} src="${base}attempt.mp4"></video>`);
+    const v=p.querySelector('video');v.addEventListener('timeupdate',()=>markCall(v.currentTime))};
+  const url=`/api/runs/${encodeURIComponent(rd.runId)}/attempt_${k}/render`;
+  let st;try{st=await getJSON(url)}catch{st={state:'none'}}
+  if(!rd||`${rd.runId}|${rd.k}`!==key)return;
+  if(st.state==='done')return show();
+  if(st.state==='unavailable'){setPlayer(`${poster?`<img src="${poster}" alt="Final frame">`:''}<div class="state">${esc(st.error||'No trajectory: this attempt never reached the sim')}</div>`);return}
+  if(st.state==='none'||st.state==='failed'){
+    try{st=await getJSON(url,{method:'POST'})}catch(err){st={state:'failed',error:err.message}}}
+  const wait=()=>{if(!rd||`${rd.runId}|${rd.k}`!==key)return;
+    getJSON(url).then(x=>{if(!rd||`${rd.runId}|${rd.k}`!==key)return;
+      if(x.state==='done')return show();
+      if(x.state==='failed'){setPlayer(`${poster?`<img src="${poster}" alt="Final frame">`:''}<div class="state">Render failed: ${esc((x.error||'').slice(0,160))}</div>`);return}
+      rd.timer=setTimeout(wait,1500)}).catch(()=>{rd.timer=setTimeout(wait,3000)})};
+  if(st.state==='done')return show();
+  setPlayer(`${poster?`<img src="${poster}" alt="Final frame">`:''}<div class="state">${st.state==='failed'?`Render busy: ${esc((st.error||'').slice(0,120))}, retrying…`:'Rendering the full video from the trajectory…'}</div>`);
+  rd.timer=setTimeout(st.state==='failed'?()=>playVideo(base,m,k):wait,st.state==='failed'?4000:1500);
+}
+let calls=[];
+async function loadCalls(base){
+  const box=rdBody.querySelector('#rdCalls');
+  try{const r=await fetch(base+'calls.json',{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();
+    calls=j.calls||[];
+    const ex=j.exception;
+    box.innerHTML=`<table class="calls"><thead><tr><th>t (s)</th><th>call</th><th>args</th><th>tcp after</th><th>grip</th></tr></thead><tbody>${calls.map((c,i)=>{
+      const a=c.args&&Object.keys(c.args).length?JSON.stringify(c.args):'';
+      return `<tr class="seek${c.error?' bad':''}" data-i="${i}" data-t="${c.t_start}"><td>${num(c.t_start,2)}–${num(c.t_end,2)}</td><td>${esc(c.call)}</td><td>${esc(a.length>80?a.slice(0,80)+'…':a)}${c.error?`<br>${esc(c.error)}`:''}</td><td>${c.tcp_after?esc(c.tcp_after.map(v=>(+v).toFixed(2)).join(', ')):''}</td><td>${c.gripper_width_after!=null?num(c.gripper_width_after*100,1)+' cm':''}${c.holding_after?' · holding':''}</td></tr>`}).join('')}</tbody></table>
+      ${ex?`<div class="err" style="padding:8px">${esc(ex.type)}: ${esc(ex.message)}${ex.sim_time!=null?` at t=${num(ex.sim_time,2)} s`:''}${ex.in_call?` in ${esc(ex.in_call)}`:''}</div>`:''}`;
+    box.querySelectorAll('tr.seek').forEach(tr=>tr.addEventListener('click',()=>{const v=rdBody.querySelector('#rdPlayer video');if(!v)return;
+      v.currentTime=(Math.round(+tr.dataset.t*30)+0.5)/30;v.pause()}));
+  }catch{box.innerHTML='<p class="note" style="padding:8px">No calls.json for this attempt (it stopped before the sim ran).</p>'}
+}
+function markCall(t){
+  const rows=rdBody.querySelectorAll('#rdCalls tr.seek');let idx=-1;
+  calls.forEach((c,i)=>{if(c.t_start<=t+1e-6)idx=i});
+  rows.forEach(r=>r.classList.toggle('now',+r.dataset.i===idx));
+}
+
 /* ---------- loop ---------- */
 let busy=false, n=0;
 async function tick(){
@@ -1118,13 +1391,20 @@ async function tick(){
       const cur=fRace.value;
       fRace.innerHTML='<option value="">latest</option>'+list.map(r=>`<option value="${esc(r.race_id)}">${esc(((r.tracker||{}).label||(r.local||{}).label||'')+' '+r.race_id)}</option>`).join('');
       fRace.value=cur;renderHistory(list);
-      if(!pinned&&!launchId&&list[0])raceId=list[0].race_id;}
+      if(!pinned&&!launchId&&list[0]){const has=r=>((r.tracker||{}).summary||{}).attempts>0||(r.local||{}).done;
+        raceId=(list.find(has)||list[0]).race_id}}
     if(n%8===0)renderScroll();
     if(raceId&&n%2===0)await pollQM();
     if(raceId){data=await getJSON(`/api/races/${encodeURIComponent(raceId)}`);await render(data)}
+    if(rd&&rd.runId&&rd.summary&&rd.summary.status==='running'&&n%3===0){   // keep an open detail live
+      const s2=await getJSON(`/api/runs/${encodeURIComponent(rd.runId)}`).catch(()=>null);
+      if(rd&&s2&&((s2.attempts||[]).length!==(rd.summary.attempts||[]).length||s2.status!==rd.summary.status)){
+        const follow=rd.k===(rd.summary.attempts||[]).length||!rd.k;rd.summary=s2;
+        if(follow)rd.k=(s2.attempts||[]).length||1;drawDetail()}}
   }catch(err){console.warn('[dojo]',err)}
   finally{busy=false;n++}
 }
+{const q=new URLSearchParams(location.search).get('race');if(q&&/^[\w.-]+$/.test(q)){raceId=q;pinned=true}}
 tick();setInterval(tick,1500);
 })();
 </script>

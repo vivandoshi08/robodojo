@@ -23,6 +23,10 @@ API:     GET /api/runs                              -> manifest (same as runs/in
                                                        slimmed), tracker race/leaderboard/attempts (or null)
          GET /api/races/<race_id>/qm                -> qm.launch.qm_status(race_id) (fail-soft: {"available": false})
          GET /api/races/<race_id>/<rest>            -> proxied to the tracker GET /races/<race_id>/<rest>
+         GET  /api/runs/<run_id>/attempt_<k>/render -> {state: done|pending|failed|none|unavailable, video}
+         POST /api/runs/<run_id>/attempt_<k>/render -> renders attempt.mp4 (640x480 @ 30) from trajectory.npz
+                                                       via robot_race.replay in a subprocess; idempotent, one
+                                                       job per attempt, at most MAX_RENDERS at once (429)
          GET /api/brain                             -> GBrain skill (gbrain/skills/trash-to-bin/SKILL.md)
          GET /api/memory?task=&limit=               -> recent Memorable episodes (local EpisodeStore; fail-open)
 All GET responses: Access-Control-Allow-Origin: *. POST refuses cross-origin requests (it spends API credit).
@@ -60,6 +64,86 @@ MIME = {".mp4": "video/mp4", ".jsonl": "application/x-ndjson", ".npz": "applicat
         ".json": "application/json", ".md": "text/markdown; charset=utf-8", ".py": "text/plain; charset=utf-8",
         ".jpg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".html": "text/html; charset=utf-8"}
 NO_STORE = (".json", ".jsonl", "live.jpg", ".html")
+ATTEMPT = re.compile(r"^attempt_(\d{1,3})$")
+MAX_RENDERS = 2        # replay renders are CPU-bound; more at once only slows every one down
+
+
+class Renderer:
+    """On-demand attempt.mp4 for --fast runs: `python -m robot_race.replay <attempt_dir>` at 640x480 @ 30,
+    the executor's own format (replay writes to a tmp name and renames, so a half file is never served)."""
+
+    def __init__(self, max_jobs: int = MAX_RENDERS):
+        self.max_jobs = max_jobs
+        self.jobs: dict[str, subprocess.Popen] = {}
+        self.errors: dict[str, str] = {}
+        self.lock = threading.Lock()
+
+    def _reap(self):
+        for d, p in list(self.jobs.items()):
+            rc = p.poll()
+            if rc is None:
+                continue
+            del self.jobs[d]
+            if rc != 0 or not os.path.exists(os.path.join(d, "attempt.mp4")):
+                tail = ""
+                try:
+                    with open(os.path.join(d, ".render.log")) as f:
+                        tail = f.read()[-400:]
+                except OSError:
+                    pass
+                self.errors[d] = f"replay exited {rc}: {tail.strip()}"
+            else:
+                _set_video(d)
+
+    def status(self, attempt_dir: str) -> dict:
+        with self.lock:
+            self._reap()
+            if attempt_dir in self.jobs:  # the mp4 can appear a moment before replay exits
+                return {"state": "pending", "video": None}
+            if os.path.exists(os.path.join(attempt_dir, "attempt.mp4")):
+                _set_video(attempt_dir)  # also covers renders started elsewhere (run_race winner render)
+                return {"state": "done", "video": "attempt.mp4"}
+            if attempt_dir in self.errors:
+                return {"state": "failed", "video": None, "error": self.errors[attempt_dir]}
+            if not os.path.exists(os.path.join(attempt_dir, "trajectory.npz")):
+                return {"state": "unavailable", "video": None, "error": "no trajectory.npz (attempt never ran)"}
+            return {"state": "none", "video": None}
+
+    def start(self, attempt_dir: str) -> dict:
+        st = self.status(attempt_dir)
+        if st["state"] in ("done", "pending", "unavailable"):
+            return st
+        with self.lock:
+            if attempt_dir in self.jobs:
+                return {"state": "pending", "video": None}
+            if len(self.jobs) >= self.max_jobs:
+                raise RuntimeError(f"{len(self.jobs)} renders already running, try again shortly")
+            self.errors.pop(attempt_dir, None)
+            log = open(os.path.join(attempt_dir, ".render.log"), "w")
+            self.jobs[attempt_dir] = subprocess.Popen(
+                [sys.executable, "-m", "robot_race.replay", attempt_dir, "--width", "640", "--height", "480",
+                 "--fps", "30"], cwd=REPO, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+            log.close()
+        return {"state": "pending", "video": None}
+
+
+def _set_video(attempt_dir: str) -> None:
+    """Point result.json media.video / video at the fresh attempt.mp4 (atomic rewrite; best effort)."""
+    p = os.path.join(attempt_dir, "result.json")
+    r = _read_json(p)
+    if not isinstance(r, dict) or (r.get("video") == "attempt.mp4"
+                                   and (r.get("media") or {}).get("video") in (None, "attempt.mp4")
+                                   and (not isinstance(r.get("media"), dict) or r["media"].get("video"))):
+        return
+    r["video"] = "attempt.mp4"
+    if isinstance(r.get("media"), dict):
+        r["media"]["video"] = "attempt.mp4"
+    try:
+        with open(p + ".tmp", "w") as f:
+            json.dump(r, f, indent=2)
+        os.replace(p + ".tmp", p)
+    except OSError:
+        pass
 
 
 def parse_range(header: str, size: int) -> tuple[int, int] | None:
@@ -209,6 +293,10 @@ def slim_run(run_dir: str, s: dict) -> dict:
         attempts.append({"k": a.get("k"), **{k: r.get(k) for k in (
             "success", "time_s", "collisions", "energy_j", "dropped", "lifted", "error", "item_final_pos",
             "media", "frames", "video")}})
+        if a.get("k") and os.path.exists(os.path.join(run_dir, f"attempt_{a['k']}", "attempt.mp4")):
+            m = dict(attempts[-1].get("media") or {})
+            m["video"] = "attempt.mp4"  # rendered after the run (serve.py Renderer / run_race winner render)
+            attempts[-1]["media"] = m
     k_now = len(attempts) + 1 if s.get("status") == "running" else None
     live = None
     if k_now and os.path.exists(os.path.join(run_dir, f"attempt_{k_now}", "live.jpg")):
@@ -335,11 +423,12 @@ class Handler(SimpleHTTPRequestHandler):
     server_version = "RobotRace/1"
 
     def __init__(self, *args, runs_root: str, ui_root: str | None = None, races_root: str | None = None,
-                 launcher: Launcher | None = None, **kw):
+                 launcher: Launcher | None = None, renderer: Renderer | None = None, **kw):
         self.runs_root = os.path.realpath(runs_root)
         self.ui_root = os.path.realpath(ui_root or os.path.join(REPO, "ui"))
         self.races_root = os.path.realpath(races_root or os.path.join(REPO, "races"))
         self.launcher = launcher
+        self.renderer = renderer
         super().__init__(*args, directory=self.runs_root, **kw)
 
     def log_request(self, code="-", size="-"):  # quiet: the UI polls a lot; log errors only
@@ -381,12 +470,23 @@ class Handler(SimpleHTTPRequestHandler):
         self._handle(head=True)
 
     def do_POST(self):
-        path = urlsplit(self.path).path
-        if path != "/api/race":
-            return self._error(HTTPStatus.NOT_FOUND, "not found")
+        path = unquote(urlsplit(self.path).path)
         origin = self.headers.get("Origin")
         if origin and urlsplit(origin).netloc != self.headers.get("Host"):
-            return self._error(HTTPStatus.FORBIDDEN, "cross-origin launch refused")
+            return self._error(HTTPStatus.FORBIDDEN, "cross-origin request refused")
+        adir = self._render_target(path)
+        if adir is not False:
+            if adir is None:
+                return self._error(HTTPStatus.NOT_FOUND, "no such attempt")
+            if self.renderer is None:
+                return self._error(HTTPStatus.SERVICE_UNAVAILABLE, "rendering is disabled on this server")
+            try:
+                st = self.renderer.start(adir)
+            except RuntimeError as e:
+                return self._error(HTTPStatus.TOO_MANY_REQUESTS, str(e))
+            return self._json(st, HTTPStatus.ACCEPTED if st["state"] == "pending" else HTTPStatus.OK)
+        if path != "/api/race":
+            return self._error(HTTPStatus.NOT_FOUND, "not found")
         if self.launcher is None:
             return self._error(HTTPStatus.SERVICE_UNAVAILABLE, "launching is disabled on this server")
         try:
@@ -440,6 +540,16 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send_file(os.path.join(self.ui_root, "index.html"), head)
         self._static(raw, head)
 
+    def _render_target(self, path: str):
+        """/api/runs/<run_id>/attempt_<k>/render -> attempt dir (None if missing); False if not that route."""
+        parts = [p for p in path.split("/") if p]
+        if len(parts) != 5 or parts[:2] != ["api", "runs"] or parts[4] != "render":
+            return False
+        if not RUN_ID.match(parts[2]) or not ATTEMPT.match(parts[3]) or "\x00" in path:
+            return None
+        d = self._safe(f"{parts[2]}/{parts[3]}")
+        return d if d and os.path.isdir(d) else None
+
     def _safe(self, rel: str) -> str | None:
         p = os.path.realpath(os.path.join(self.runs_root, rel.lstrip("/")))
         if p != self.runs_root and not p.startswith(self.runs_root + os.sep):
@@ -474,6 +584,15 @@ class Handler(SimpleHTTPRequestHandler):
             except ValueError:
                 return self._error(HTTPStatus.BAD_REQUEST, "since must be an int", head)
             return self._json(read_events(os.path.join(run_dir, "events.jsonl"), since), head=head)
+        if len(parts) == 3 and parts[2] == "render":
+            adir = self._render_target(raw)
+            if not adir:
+                return self._error(HTTPStatus.NOT_FOUND, "no such attempt", head)
+            if self.renderer is None:
+                has = os.path.exists(os.path.join(adir, "attempt.mp4"))
+                return self._json({"state": "done" if has else "none", "video": "attempt.mp4" if has else None},
+                                  head=head)
+            return self._json(self.renderer.status(adir), head=head)
         if len(parts) == 2 and parts[1] == "transcript":
             turns = read_events(os.path.join(run_dir, "transcript.jsonl"))["events"]
             return self._json({"turns": turns}, head=head)
@@ -492,8 +611,15 @@ class Handler(SimpleHTTPRequestHandler):
                 continue
             plan = _read_json(os.path.join(d, "plan.json")) or {}
             race = _read_json(os.path.join(d, "race.json")) or {}
-            out.append({"race_id": n, "task": race.get("task") or plan.get("task_id"), "label": race.get("label"),
-                        "created": os.path.getmtime(d), "done": os.path.exists(os.path.join(d, "race.json")),
+            launch = _read_json(os.path.join(d, "launch.json")) or {}
+            # the dir mtime moves whenever post-race files land, so date a race by its first file instead
+            born = [os.path.getmtime(os.path.join(d, f)) for f in ("plan.json", "launch.json", "context.md")
+                    if os.path.exists(os.path.join(d, f))]
+            out.append({"race_id": n, "task": race.get("task") or plan.get("task_id") or launch.get("task"),
+                        "label": race.get("label") or launch.get("label"),
+                        "backend": launch.get("backend") or "local",
+                        "created": launch.get("started") or (min(born) if born else os.path.getmtime(d)),
+                        "done": os.path.exists(os.path.join(d, "race.json")),
                         "closed": os.path.exists(os.path.join(d, "close.json")),
                         "agents": len(plan.get("strategies") or [])})
         return out
@@ -505,8 +631,8 @@ class Handler(SimpleHTTPRequestHandler):
             by = {r["race_id"]: {"race_id": r["race_id"], "local": r} for r in self._local_races()}
             for r in tracked or []:
                 by.setdefault(r["race_id"], {"race_id": r["race_id"], "local": None})["tracker"] = r
-            rows = sorted(by.values(), key=lambda r: (r.get("local") or {}).get("created")
-                          or (r.get("tracker") or {}).get("created_at") or 0, reverse=True)
+            rows = sorted(by.values(), key=lambda r: (r.get("tracker") or {}).get("created_at")
+                          or (r.get("local") or {}).get("created") or 0, reverse=True)
             return self._json({"tracker": TRACKER_URL if tracked is not None else None, "races": rows}, head=head)
         race_id = parts[0]
         if not RUN_ID.match(race_id):
@@ -635,8 +761,9 @@ def make_server(runs_root: str = "runs", host: str = "127.0.0.1", port: int = 80
     os.makedirs(runs_root, exist_ok=True)
     races_root = os.path.abspath(races_root or os.path.join(REPO, "races"))
     launcher = Launcher(os.path.abspath(runs_root), races_root) if launch else None
+    renderer = Renderer() if launch else None  # --no-launch = read-only viewer: no subprocesses at all
     srv = ThreadingHTTPServer((host, port), partial(Handler, runs_root=runs_root, ui_root=ui_root,
-                                                    races_root=races_root, launcher=launcher))
+                                                    races_root=races_root, launcher=launcher, renderer=renderer))
     srv.daemon_threads = True
     return srv
 
@@ -647,7 +774,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--races", default=os.path.join(REPO, "races"))
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--no-launch", action="store_true", help="disable POST /api/race (read-only viewer)")
+    ap.add_argument("--no-launch", action="store_true", help="disable POST /api/race and renders (read-only viewer)")
     a = ap.parse_args(argv)
     srv = make_server(a.runs, a.host, a.port, races_root=a.races, launch=not a.no_launch)
     print(f"dojo at http://{a.host}:{srv.server_address[1]}/  (runs: {os.path.abspath(a.runs)}, "
