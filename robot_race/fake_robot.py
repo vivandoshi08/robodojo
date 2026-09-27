@@ -30,7 +30,7 @@ CANNED_STATES = {
     "can_to_bin": _state({"name": "can", "shape": "cylinder", "size": [0.03, 0.05], "mass": 0.06, "lying": False,
                           "pos": [0.5774, -0.2161, 0.2498], "yaw_deg": 0.0}),
     "bottle_to_bin": _state({"name": "bottle", "shape": "capsule", "size": [0.028, 0.07], "mass": 0.08, "lying": True,
-                             "pos": [0.5774, -0.216, 0.2276], "yaw_deg": -0.0}),
+                             "pos": [0.5774, -0.216, 0.2276], "yaw_deg": -82.6}),
     "paper_to_bin": _state({"name": "paper", "shape": "sphere", "size": [0.034], "mass": 0.03, "lying": False,
                             "pos": [0.5774, -0.216, 0.2334], "yaw_deg": -0.0}),
     "box_to_bin": _state({"name": "box", "shape": "box", "size": [0.06, 0.03, 0.03], "mass": 0.05, "lying": False,

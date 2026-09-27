@@ -95,8 +95,12 @@ def build_model(item: str, item_pos, item_yaw: float, bin_center=None) -> tuple[
         b.add_geom(name=f"bin_wall{i}", type=mujoco.mjtGeom.mjGEOM_BOX, pos=[dx, dy, bh / 2], size=[sx, sy, bh / 2], rgba=green)
 
     it = ITEMS[item]
-    quat = np.zeros(4)
-    mujoco.mju_euler2Quat(quat, [0, np.pi / 2 if it.get("lying") else 0, item_yaw], "xyz")
+    # Tip over (about y) first, then yaw about the world z axis. Intrinsic "xyz" would spin a lying item
+    # about its own long axis, leaving it always aligned with +x.
+    q_tip, q_yaw, quat = np.zeros(4), np.zeros(4), np.zeros(4)
+    mujoco.mju_axisAngle2Quat(q_tip, [0, 1, 0], np.pi / 2 if it.get("lying") else 0.0)
+    mujoco.mju_axisAngle2Quat(q_yaw, [0, 0, 1], item_yaw)
+    mujoco.mju_mulQuat(quat, q_yaw, q_tip)
     ib = wb.add_body(name="item", pos=list(item_pos), quat=list(quat))
     ib.add_freejoint(name="item_free")
     ib.add_geom(name="item", type=GEOM_TYPES[it["type"]], size=it["size"] + [0] * (3 - len(it["size"])),
