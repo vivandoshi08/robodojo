@@ -39,7 +39,7 @@ class FakeClient:
                                         cache_creation_input_tokens=0))
 
 
-def fake_run_policy(code, task, seed, out_dir, timeout_s=180, fast=False, live=True):
+def fake_run_policy(code, task, seed, out_dir, timeout_s=180, fast=False, live=True, response_code_sha256=None):
     from PIL import Image
     out = Path(out_dir)
     (out / "policy.py").write_text(code)
@@ -119,12 +119,14 @@ def test_loop_no_code_then_fail_then_success(env):
     ev = [json.loads(l) for l in (run_dir / "events.jsonl").read_text().splitlines()]
     assert [(e["type"], e["attempt"]) for e in ev] == [
         ("run_started", None),
-        ("attempt_started", 1), ("attempt_finished", 1),
-        ("attempt_started", 2), ("code_generated", 2), ("attempt_finished", 2),
-        ("attempt_started", 3), ("code_generated", 3), ("attempt_finished", 3),
+        ("attempt_started", 1), ("model_request", 1), ("model_response", 1), ("attempt_finished", 1),
+        ("attempt_started", 2), ("model_request", 2), ("model_response", 2), ("code_generated", 2),
+        ("attempt_finished", 2),
+        ("attempt_started", 3), ("model_request", 3), ("model_response", 3), ("code_generated", 3),
+        ("attempt_finished", 3),
         ("run_finished", None)]
     assert all(e["run_id"] == s["run_id"] and isinstance(e["ts"], float) for e in ev)
-    assert ev[4]["code"] == BAD and ev[5]["result"]["collisions"] == 2
+    assert ev[8]["code"] == BAD and ev[9]["result"]["collisions"] == 2
     assert ev[-1]["status"] == "solved" and ev[-1]["solved_at"] == 3
 
     # prompts: system cached + strategy; first turn has memory, task, 2 images, example
