@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS episodes (
     episode_id       TEXT PRIMARY KEY,
     race_id          TEXT NOT NULL,
     scope            TEXT NOT NULL,
+    agent_id         TEXT NOT NULL,
     strategy         TEXT NOT NULL,
     attempt          INTEGER NOT NULL,
     trash_type       TEXT NOT NULL,
@@ -101,16 +102,16 @@ class EpisodeStore:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO episodes (
-                    episode_id, race_id, scope, strategy, attempt, trash_type,
+                    episode_id, race_id, scope, agent_id, strategy, attempt, trash_type,
                     bin_distance_cm, distance_bucket, bin_bearing_deg, bearing_bucket,
                     outcome, success,
                     bin_knocked_over, duration_s, seed, sim, reason, params_json,
                     memorable_slug, memorable_refusal, recorded_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     data["episode_id"], data["race_id"], data["scope"],
-                    data["strategy"], data["attempt"], data["trash_type"],
+                    data["agent_id"], data["strategy"], data["attempt"], data["trash_type"],
                     data["bin_distance_cm"], distance_bucket(episode.bin_distance_cm),
                     data["bin_bearing_deg"], bearing_bucket(episode.bin_bearing_deg),
                     data["outcome"], int(episode.success),
@@ -151,7 +152,8 @@ class EpisodeStore:
     @staticmethod
     def _to_episode(row: sqlite3.Row) -> Episode:
         return Episode(
-            race_id=row["race_id"], scope=row["scope"], strategy=row["strategy"],
+            race_id=row["race_id"], scope=row["scope"], agent_id=row["agent_id"],
+            strategy=row["strategy"],
             attempt=row["attempt"], trash_type=row["trash_type"],
             bin_distance_cm=row["bin_distance_cm"], params=json.loads(row["params_json"]),
             bin_bearing_deg=row["bin_bearing_deg"],

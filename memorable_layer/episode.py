@@ -17,6 +17,7 @@ class Outcome(str, Enum):
     RIM_OUT = "rim_out"
     BOUNCED_OUT = "bounced_out"
     MISS = "miss"
+    WIDE = "wide"
     NO_GRASP = "no_grasp"
     DROPPED_EARLY = "dropped_early"
 
@@ -28,6 +29,7 @@ class Outcome(str, Enum):
 #: Coarse failure direction, used by the advisor to pick which knob to turn.
 OVERSHOOT_OUTCOMES = (Outcome.BOUNCED_OUT,)
 SHORT_OUTCOMES = (Outcome.MISS, Outcome.DROPPED_EARLY)
+WIDE_OUTCOMES = (Outcome.WIDE,)
 GRASP_OUTCOMES = (Outcome.NO_GRASP,)
 
 
@@ -64,6 +66,35 @@ def situation_phrase(
     return phrase
 
 
+#: Outcome vocabularies differ across the seam. This is the mapping, in one
+#: place: robodojo's outcome on the left, the GBrain side's on the right.
+GBRAIN_OUTCOME = {
+    Outcome.IN: "in_bin",
+    Outcome.RIM_OUT: "rim_out",
+    Outcome.BOUNCED_OUT: "long",
+    Outcome.MISS: "short",
+    Outcome.WIDE: "wide",
+    Outcome.NO_GRASP: "dropped",
+    Outcome.DROPPED_EARLY: "dropped",
+}
+
+#: Parameters the GBrain verdict renderer formats for every episode. It calls
+#: ``.toFixed()`` on each one, so a row must carry all three or the page throws.
+GBRAIN_PARAM_KEYS = ("release_height_m", "toss_velocity_mps", "grasp_angle_deg")
+
+#: Scoring. In the bin is what counts; a rim-out earns partial credit for being
+#: close; a fast success earns a small bonus. Knocking the bin over forfeits all
+#: credit and costs the penalty, however the throw ended — the same rule as
+#: :attr:`Episode.success`, so the standings and the winner never disagree.
+#: Standings are the sum over a competitor's attempts, so these numbers only
+#: need to order strategies sensibly.
+SCORE_IN_BIN = 10.0
+SCORE_NEAR_MISS = 2.0
+SCORE_KNOCKOVER_PENALTY = 5.0
+SCORE_SPEED_BONUS_MAX = 2.0
+SCORE_SPEED_REFERENCE_S = 5.0
+
+
 def params_to_si(params: dict[str, float]) -> dict[str, float]:
     """Centimetre parameters mirrored into metres, keys renamed ``*_m``.
 
@@ -94,6 +125,8 @@ class Episode:
     reason: str
     #: Bearing to the bin, degrees; negative is left of straight ahead.
     bin_bearing_deg: float = 0.0
+    #: Competitor identity on the GBrain side; defaults to the scope.
+    agent_id: str | None = None
     bin_knocked_over: bool = False
     duration_s: float | None = None
     seed: int | None = None
@@ -109,6 +142,8 @@ class Episode:
     def __post_init__(self) -> None:
         if isinstance(self.outcome, str):
             self.outcome = Outcome(self.outcome)
+        if not self.agent_id:
+            self.agent_id = self.scope
         if self.attempt < 1:
             raise ValueError("attempt is 1-based")
 
@@ -123,6 +158,22 @@ class Episode:
     def success(self) -> bool:
         """In the bin, bin still standing. The only thing that counts."""
         return self.outcome.landed_in and not self.bin_knocked_over
+
+    @property
+    def score(self) -> float:
+        """Points for this attempt. See the SCORE_* constants for the rationale."""
+        if self.bin_knocked_over:
+            return -SCORE_KNOCKOVER_PENALTY
+        if self.outcome.landed_in:
+            points = SCORE_IN_BIN
+            if self.duration_s is not None:
+                bonus = SCORE_SPEED_BONUS_MAX - (self.duration_s / SCORE_SPEED_REFERENCE_S)
+                points += max(0.0, min(SCORE_SPEED_BONUS_MAX, bonus))
+        elif self.outcome is Outcome.RIM_OUT:
+            points = SCORE_NEAR_MISS
+        else:
+            points = 0.0
+        return round(points, 3)
 
     # -- phrasing ---------------------------------------------------------
 
@@ -189,7 +240,42 @@ class Episode:
         # Parameter names carry their own units; these two are the mirror.
         data["bin_distance_m"] = round(self.bin_distance_cm / 100.0, 4)
         data["params_si"] = params_to_si(self.params)
+        data["bin_angle_deg"] = self.bin_bearing_deg
+        data["score"] = self.score
+        data["gbrain_outcome"] = GBRAIN_OUTCOME[self.outcome]
         return data
+
+    def to_gbrain_row(self) -> dict[str, Any]:
+        """This episode in the shape the GBrain side's ``fromRow`` expects.
+
+        Metres and degrees, its outcome vocabulary, a numeric score, and all
+        three of its parameter keys present — missing ones are 0.0 rather than
+        absent, because the verdict renderer formats every key unconditionally.
+        """
+        si = params_to_si(self.params)
+        params = {key: float(si.get(key, 0.0)) for key in GBRAIN_PARAM_KEYS}
+        return {
+            "episode_id": self.episode_id,
+            "race_id": self.race_id,
+            "agent_id": self.agent_id,
+            "strategy": self.strategy,
+            "attempt": self.attempt,
+            "trash_type": self.trash_type,
+            "bin_position": {
+                "distance_m": round(self.bin_distance_cm / 100.0, 4),
+                "angle_deg": self.bin_bearing_deg,
+            },
+            "bin_distance_m": round(self.bin_distance_cm / 100.0, 4),
+            "bin_angle_deg": self.bin_bearing_deg,
+            "params": params,
+            **params,
+            "outcome": GBRAIN_OUTCOME[self.outcome],
+            "score": self.score,
+            "reason": self.reason,
+            # Not in its interface, but harmless and useful on the page.
+            "bin_knocked_over": self.bin_knocked_over,
+            "robodojo_outcome": self.outcome.value,
+        }
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), sort_keys=True)

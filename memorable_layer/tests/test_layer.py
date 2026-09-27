@@ -27,6 +27,8 @@ from memorable_layer import (  # noqa: E402
     answer_key_rows,
     baseline_params,
     build_trace,
+    gbrain_race_result,
+    gbrain_rows,
     race_episodes,
     race_evidence,
     situation_phrase,
@@ -520,3 +522,104 @@ class TestAdvisorRegressions(TempCase):
         brief = self.brief()
         self.assertLess(brief.suggested_params["toss_velocity_mps"], 1.45)
         self.assertIn("1 overshoot episode(s)", brief.rationale)
+
+
+class TestGBrainContract(TempCase):
+    """The row shape the GBrain side's ``fromRow`` maps, checked field by field.
+
+    Its verdict renderer calls ``.toFixed()`` on every key in PARAM_KEYS and sums
+    ``score`` for standings, so a missing parameter or score breaks its page.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.store = EpisodeStore(self.tmp / "episodes")
+
+    def test_row_carries_every_field_fromrow_reads(self) -> None:
+        row = episode(
+            attempt=2, outcome=Outcome.IN, reason="clean", bin_bearing_deg=-15.0,
+            params={"release_height_cm": 82.0, "toss_velocity_mps": 1.9, "grasp_angle_deg": 90.0},
+        ).to_gbrain_row()
+        for key in ("episode_id", "race_id", "agent_id", "strategy", "attempt",
+                    "trash_type", "bin_position", "params", "outcome", "score", "reason"):
+            self.assertIn(key, row)
+        self.assertEqual(row["bin_position"], {"distance_m": 0.5, "angle_deg": -15.0})
+        self.assertEqual(row["bin_angle_deg"], -15.0)
+        self.assertEqual(row["agent_id"], "scope-toss")
+
+    def test_all_three_param_keys_are_always_present(self) -> None:
+        # push_off_edge has no toss velocity; the key must still be there as 0.0
+        # or the renderer throws on undefined.toFixed().
+        row = episode(
+            strategy="push_off_edge",
+            params=baseline_params("push_off_edge", "bottle", 50.0),
+        ).to_gbrain_row()
+        for key in ("release_height_m", "toss_velocity_mps", "grasp_angle_deg"):
+            self.assertIn(key, row["params"])
+            self.assertIsInstance(row["params"][key], float)
+        self.assertEqual(row["params"]["toss_velocity_mps"], 0.0)
+
+    def test_every_baseline_carries_grasp_angle(self) -> None:
+        for strategy in ("toss", "drop", "pick_place", "push_off_edge"):
+            self.assertIn("grasp_angle_deg", baseline_params(strategy, "can", 50.0))
+
+    def test_outcome_vocabulary_is_translated(self) -> None:
+        cases = {
+            Outcome.IN: "in_bin", Outcome.RIM_OUT: "rim_out", Outcome.BOUNCED_OUT: "long",
+            Outcome.MISS: "short", Outcome.WIDE: "wide", Outcome.NO_GRASP: "dropped",
+            Outcome.DROPPED_EARLY: "dropped",
+        }
+        for mine, theirs in cases.items():
+            self.assertEqual(episode(outcome=mine).to_gbrain_row()["outcome"], theirs)
+
+    def test_lengths_are_metres_not_centimetres(self) -> None:
+        row = episode(bin_distance_cm=100.0, params={"release_height_cm": 82.0}).to_gbrain_row()
+        self.assertEqual(row["bin_position"]["distance_m"], 1.0)
+        self.assertEqual(row["params"]["release_height_m"], 0.82)
+
+    def test_score_orders_outcomes_sensibly(self) -> None:
+        landed = episode(outcome=Outcome.IN, reason="clean", duration_s=4.0).score
+        near = episode(outcome=Outcome.RIM_OUT).score
+        missed = episode(outcome=Outcome.MISS).score
+        knocked = episode(outcome=Outcome.IN, reason="clean", bin_knocked_over=True).score
+        self.assertGreater(landed, near)
+        self.assertGreater(near, missed)
+        # A knockover forfeits everything, so it ranks below even a plain miss —
+        # the same rule as Episode.success, so standings cannot crown a strategy
+        # that wrecks the bin.
+        self.assertLess(knocked, missed)
+        self.assertEqual(knocked, -5.0)
+
+    def test_faster_success_scores_higher(self) -> None:
+        self.assertGreater(
+            episode(outcome=Outcome.IN, reason="clean", duration_s=2.0).score,
+            episode(outcome=Outcome.IN, reason="clean", duration_s=9.0).score,
+        )
+
+    def test_contract_filter_is_winner_wins_plus_others_losses(self) -> None:
+        self.store.append(episode(attempt=1, outcome=Outcome.BOUNCED_OUT))
+        self.store.append(episode(attempt=2, outcome=Outcome.IN, reason="clean"))
+        self.store.append(
+            episode(scope="scope-drop", strategy="drop", attempt=1, outcome=Outcome.RIM_OUT)
+        )
+        rows = gbrain_rows(self.store, "race-1", contract=True)
+        self.assertEqual(
+            {(r["strategy"], r["outcome"]) for r in rows},
+            {("toss", "in_bin"), ("drop", "rim_out")},
+        )
+
+    def test_race_result_standings_sum_scores_by_agent(self) -> None:
+        self.store.append(episode(attempt=1, outcome=Outcome.BOUNCED_OUT))
+        self.store.append(episode(attempt=2, outcome=Outcome.IN, reason="clean", duration_s=4.0))
+        self.store.append(
+            episode(scope="scope-drop", strategy="drop", attempt=1, outcome=Outcome.RIM_OUT)
+        )
+        result = gbrain_race_result(self.store, "race-1")
+        self.assertEqual(result["agents"][0]["agent_id"], "scope-toss")
+        self.assertEqual(result["agents"][0]["successes"], 1)
+        self.assertEqual(result["agents"][0]["attempts"], 2)
+        self.assertIn("won on 1 of 2 attempts", result["summary"])
+
+    def test_agent_id_survives_a_store_round_trip(self) -> None:
+        self.store.append(episode(agent_id="agent-toss-1"))
+        self.assertEqual(self.store.race_episodes("race-1")[0].agent_id, "agent-toss-1")

@@ -24,10 +24,19 @@ from __future__ import annotations
 from .advisor import Advisor, AttemptBrief, baseline_params
 from .client import IngestResult, MemorableClient, Recollection
 from .config import STRATEGIES, TRASH_TYPES, Settings, scope_home
-from .episode import Episode, Outcome, bearing_bucket, distance_bucket, situation_phrase
+from .episode import (
+    GBRAIN_OUTCOME,
+    Episode,
+    Outcome,
+    bearing_bucket,
+    distance_bucket,
+    situation_phrase,
+)
 from .evidence import (
     answer_key_rows,
     distance_policy_hint,
+    gbrain_race_result,
+    gbrain_rows,
     race_episodes,
     race_evidence,
     skillopt_rows,
@@ -40,6 +49,7 @@ from .trace import build_trace, recall_query
 
 __all__ = [
     "Advisor",
+    "GBRAIN_OUTCOME",
     "AttemptBrief",
     "AttemptRecorder",
     "Episode",
@@ -57,6 +67,8 @@ __all__ = [
     "build_trace",
     "distance_bucket",
     "distance_policy_hint",
+    "gbrain_race_result",
+    "gbrain_rows",
     "open_recorder",
     "race_episodes",
     "race_evidence",

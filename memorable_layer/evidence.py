@@ -38,6 +38,34 @@ def race_episodes(store: EpisodeStore, race_id: str) -> list[dict[str, Any]]:
     return [episode.to_dict() for episode in store.race_episodes(race_id)]
 
 
+def gbrain_rows(
+    store: EpisodeStore, race_id: str | None = None, contract: bool = False
+) -> list[dict[str, Any]]:
+    """Episodes in the GBrain side's own row shape.
+
+    Its ``FileMemorable`` reads a JSON array of these and maps them with
+    ``fromRow``, so this output is a drop-in for its fixture file.
+
+    ``contract=True`` applies the filter its ``raceEpisodes`` documents — the
+    winner's successes plus everyone else's failures — rather than every attempt.
+    """
+    episodes = store.race_episodes(race_id) if race_id else list(store)
+    if not contract or race_id is None:
+        return [episode.to_gbrain_row() for episode in episodes]
+
+    by_strategy: dict[str, list[Episode]] = defaultdict(list)
+    for episode in episodes:
+        by_strategy[episode.strategy].append(episode)
+    summaries = {name: strategy_summary(eps) for name, eps in by_strategy.items()}
+    ranking = rank_strategies(summaries)
+    winner = ranking[0] if ranking else None
+    return [
+        episode.to_gbrain_row()
+        for episode in episodes
+        if (episode.success if episode.strategy == winner else not episode.success)
+    ]
+
+
 def strategy_summary(episodes: list[Episode]) -> dict[str, Any]:
     """Scoreboard for one strategy: what the referee ranks on."""
     attempts = len(episodes)
@@ -124,6 +152,38 @@ def skillopt_rows(store: EpisodeStore, race_id: str) -> list[dict[str, Any]]:
     return store.score_rows(race_id)
 
 
+def gbrain_race_result(store: EpisodeStore, race_id: str) -> dict[str, Any]:
+    """A ``RaceResult`` for the GBrain side: standings by agent, summed scores."""
+    episodes = store.race_episodes(race_id)
+    by_agent: dict[str, list[Episode]] = defaultdict(list)
+    for episode in episodes:
+        by_agent[episode.agent_id or episode.scope].append(episode)
+
+    agents = [
+        {
+            "agent_id": agent_id,
+            "strategy": eps[0].strategy,
+            "total_score": round(sum(e.score for e in eps), 3),
+            "attempts": len(eps),
+            "successes": sum(1 for e in eps if e.success),
+        }
+        for agent_id, eps in by_agent.items()
+    ]
+    agents.sort(key=lambda a: (-a["total_score"], -a["successes"], a["agent_id"]))
+    finished = max((e.recorded_at for e in episodes), default=None)
+    return {
+        "race_id": race_id,
+        "finished_at": finished,
+        "agents": agents,
+        "summary": (
+            f"{agents[0]['strategy']} won on {agents[0]['successes']} of "
+            f"{agents[0]['attempts']} attempts"
+            if agents
+            else "no attempts recorded"
+        ),
+    }
+
+
 def race_evidence(
     store: EpisodeStore, race_id: str, winner: str | None = None
 ) -> dict[str, Any]:
@@ -150,6 +210,7 @@ def race_evidence(
         "skillopt_rows": skillopt_rows(store, race_id),
         "answer_key": answer_key_rows(store, race_id),
         "strategy_record": strategy_record(store),
+        "gbrain_race_result": gbrain_race_result(store, race_id),
         "episodes": [e.to_dict() for e in episodes],
     }
 

@@ -27,6 +27,8 @@ from .episode import Episode, Outcome
 from .evidence import (
     answer_key_rows,
     distance_policy_hint,
+    gbrain_race_result,
+    gbrain_rows,
     race_episodes,
     race_evidence,
     skillopt_rows,
@@ -123,6 +125,18 @@ def cmd_skillopt_rows(args: argparse.Namespace) -> int:
 def cmd_answer_key(args: argparse.Namespace) -> int:
     store = EpisodeStore(_settings(args).store_root)
     _emit(answer_key_rows(store, args.race, si=not args.cm))
+    return 0
+
+
+def cmd_gbrain_rows(args: argparse.Namespace) -> int:
+    store = EpisodeStore(_settings(args).store_root)
+    _emit(gbrain_rows(store, args.race, contract=args.contract))
+    return 0
+
+
+def cmd_gbrain_result(args: argparse.Namespace) -> int:
+    store = EpisodeStore(_settings(args).store_root)
+    _emit(gbrain_race_result(store, args.race))
     return 0
 
 
@@ -300,6 +314,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--race")
     p.add_argument("--cm", action="store_true", help="centimetres instead of metres")
     p.set_defaults(func=cmd_answer_key)
+
+    p = sub.add_parser(
+        "gbrain-rows", help="episodes in the GBrain side's row shape (drop-in fixture)"
+    )
+    p.add_argument("--race", help="one race; omit for the whole episode table")
+    p.add_argument(
+        "--contract",
+        action="store_true",
+        help="winner's successes + everyone else's failures, as raceEpisodes documents",
+    )
+    p.set_defaults(func=cmd_gbrain_rows)
+
+    p = sub.add_parser("gbrain-result", help="RaceResult standings for the verdict page")
+    p.add_argument("--race", required=True)
+    p.set_defaults(func=cmd_gbrain_result)
 
     p = sub.add_parser("strategy-record", help='per-strategy "won 2 of 3 races"')
     p.set_defaults(func=cmd_record_card)

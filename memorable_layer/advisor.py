@@ -26,6 +26,7 @@ from .episode import (
     GRASP_OUTCOMES,
     OVERSHOOT_OUTCOMES,
     SHORT_OUTCOMES,
+    WIDE_OUTCOMES,
     Episode,
     distance_bucket,
 )
@@ -179,6 +180,7 @@ class Advisor:
         knockovers = [e for e in misses if e.bin_knocked_over]
         rim_outs = [e for e in misses if e.outcome.value == "rim_out"]
         no_grasps = [e for e in misses if e.outcome in GRASP_OUTCOMES]
+        wides = [e for e in misses if e.outcome in WIDE_OUTCOMES]
 
         if knockovers:
             self._scale(params, "toss_velocity_mps", 1 - KNOCKOVER_VELOCITY_CUT)
@@ -207,6 +209,20 @@ class Advisor:
         if no_grasps:
             self._shift(params, "grasp_width_cm", GRASP_WIDTH_OPEN_CM)
             notes.append(f"{len(no_grasps)} failed grasp(s), opening the gripper")
+
+        if wides:
+            # A lateral miss is an aim problem, not a power problem. Only correct
+            # it when the strategy actually exposes an aim parameter; otherwise
+            # say so rather than turning the wrong knob.
+            if "aim_offset_deg" in params:
+                mean_bearing = sum(e.bin_bearing_deg for e in wides) / len(wides)
+                self._shift(params, "aim_offset_deg", -mean_bearing / 2.0)
+                notes.append(f"{len(wides)} wide miss(es), correcting aim")
+            else:
+                notes.append(
+                    f"{len(wides)} wide miss(es), but this strategy has no aim "
+                    "parameter to correct"
+                )
 
         deltas = {
             key: round(params[key] - before[key], 4)
@@ -255,18 +271,33 @@ def baseline_params(strategy: str, trash_type: str, distance_cm: float) -> dict[
     Intentionally crude — the point of the race is that memory replaces these.
     """
     bucket = distance_bucket(distance_cm)
+    # grasp_angle_deg is present for every strategy: the GBrain side formats it
+    # on every episode row.
     if strategy == "toss":
         params = {
             "toss_velocity_mps": round(0.9 + bucket / 100.0, 3),
             "release_height_cm": 35.0,
+            "grasp_angle_deg": 90.0,
             "grasp_width_cm": 8.0,
         }
     elif strategy == "drop":
-        params = {"release_height_cm": 10.0, "grasp_width_cm": 8.0}
+        params = {
+            "release_height_cm": 10.0,
+            "grasp_angle_deg": 90.0,
+            "grasp_width_cm": 8.0,
+        }
     elif strategy == "push_off_edge":
-        params = {"push_velocity_mps": 0.25, "grasp_width_cm": 8.0}
+        params = {
+            "push_velocity_mps": 0.25,
+            "grasp_angle_deg": 45.0,
+            "grasp_width_cm": 8.0,
+        }
     else:  # pick_place
-        params = {"release_height_cm": 5.0, "grasp_width_cm": 8.0}
+        params = {
+            "release_height_cm": 5.0,
+            "grasp_angle_deg": 90.0,
+            "grasp_width_cm": 8.0,
+        }
     if trash_type == "bottle":
         params["grasp_width_cm"] = 7.0
     elif trash_type == "can":
