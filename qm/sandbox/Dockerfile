@@ -28,11 +28,12 @@ COPY policies policies
 COPY scripts scripts
 COPY run_agent.py run_policy.py ./
 COPY qm/skills qm/skills
+COPY qm/strategies.json qm/strategies.json
 
 # Smoke check at build time: the reference policy lands the can with no video.
 RUN uv run --no-sync python -c "\
 from robot_race.tasks import Env; from robot_race.robot import SimRobot; import numpy as np, math; \
-env = Env('can_to_bin', 0, record=False); r = SimRobot(env); g = {'robot': r, 'np': np, 'math': math}; \
+env = Env('can_to_bin', 0, record=False); r = SimRobot(env, observation='oracle'); g = {'robot': r, 'np': np, 'math': math}; \
 exec(open('policies/reference_pick_and_drop.py').read(), g); g['run'](r); env.settle(1.0); \
 res = env.result(); print(res); assert res['success']"
 

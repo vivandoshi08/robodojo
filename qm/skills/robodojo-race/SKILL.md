@@ -20,7 +20,7 @@ Strategy cards: `/opt/robodojo/qm/strategies.json`.
    `race_result` or failed. Do not solve the task yourself.
 4. Rank: success first, then fewer attempts, then lower `time_s`, `collisions`, `energy_j`.
    Reply with a standings table, the winning strategy, and the winner's final `run(robot)` code.
-   Say why the losers lost, using their `error` / `item_final_pos` / `dropped` fields.
+   Say why the losers lost, using their `error` / `dropped` / `lifted` fields.
 
 ## If you are a racer (your swarm context has role "racer")
 
@@ -33,9 +33,10 @@ approach looks easier: the race compares strategies.
 2. Up to 5 attempts, k = 1..5:
    - Write `/root/race/attempt_<k>.py` defining `run(robot)`. Only `robot`, `np`, `math` are available;
      no other imports, no file or network I/O.
-   - Run it: `cd /opt/robodojo && uv run --no-sync python run_policy.py /root/race/attempt_<k>.py --task <task> --seeds <seed> --fast --runs-dir /root/runs --run-id <strategy_id>-a<k>`
+   - Run it: `cd /opt/robodojo && uv run --no-sync python run_policy.py /root/race/attempt_<k>.py --task <task> --seeds <seed> --fast --observation telemetry --runs-dir /root/runs --run-id <strategy_id>-a<k>`
+     (telemetry = what a real arm sees, same as `run_agent.py`; locate the item from `robot.get_image(..., depth=True)` + `robot.get_camera(...)`)
    - Read `/root/runs/<strategy_id>-a<k>/seed_<seed>/result.json` and look at the key frames
      `key_0.png .. key_3.png` next to it. Stop on `success: true`; otherwise revise.
 3. Send one message to the root (`POST /v1/swarm`, `action: "send"`, audience = the root's id):
    text = a JSON object
-   `{"type":"race_result","strategy":"<id>","success":bool,"attempts":k,"time_s":..,"collisions":..,"energy_j":..,"error":..,"item_final_pos":..,"lesson":"<one sentence on what worked or why it failed>","code":"<final run(robot) source>"}`
+   `{"type":"race_result","strategy":"<id>","success":bool,"attempts":k,"time_s":..,"collisions":..,"energy_j":..,"error":..,"lesson":"<one sentence on what worked or why it failed>","code":"<final run(robot) source>"}`
