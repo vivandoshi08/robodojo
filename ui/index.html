@@ -368,6 +368,29 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
 }
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---- live mode ---- */
+body.demo .live-only{display:none!important}
+body.live .demo-only{display:none!important}
+.launch{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.launch label{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-soft)}
+.launch select,.launch input{font:inherit;font-family:var(--mono);font-size:12px;letter-spacing:0;text-transform:none;
+  color:var(--ink);background:rgba(0,0,0,.3);border:1px solid var(--glass-brd);border-radius:999px;padding:6px 10px;max-width:190px}
+.launch input[type=number]{width:54px}
+.launch select:focus-visible,.launch input:focus-visible{outline:2px solid var(--riso);outline-offset:2px}
+.screen img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--bp)}
+.screen .idle{display:grid;place-items:center;aspect-ratio:4/3;color:var(--ink-soft);font-family:var(--mono);
+  font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.mat .desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.ctx{margin:0 0 12px;font-size:12.5px;color:var(--ink-soft)}
+.ctx summary{cursor:pointer;color:var(--riso)}
+.ctx pre{white-space:pre-wrap;max-height:220px;overflow:auto;font-family:var(--mono);font-size:11px;line-height:1.5;
+  margin:8px 0 0;padding:10px;border-radius:10px;background:rgba(0,0,0,.3);border:1px solid var(--glass-brd)}
+.scroll pre{font-family:var(--mono);font-size:12px;line-height:20px;white-space:pre-wrap;margin:8px 0;padding:10px;
+  background:rgba(0,0,0,.28);border-radius:8px}
+.scroll p.md-p{margin:0;color:var(--ink-soft)}
+.lesson{display:block;margin-top:6px;color:var(--ink-soft);font-size:12.5px}
 </style>
 </head>
 <body>
@@ -398,11 +421,20 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
     </div>
     <div class="controls">
       <span class="round" id="roundLabel">Round 0</span>
-      <div class="seg" role="group" aria-label="Playback speed">
+      <form class="launch live-only" id="launchForm" autocomplete="off">
+        <label>Race <select id="fRace" aria-label="Race to watch"><option value="">latest</option></select></label>
+        <label>Task <select id="fTask" aria-label="Task"></select></label>
+        <label>Agents <input id="fAgents" type="number" min="1" max="6" value="4" aria-label="Agents"></label>
+        <label>Seeds <input id="fSeeds" value="0" size="5" aria-label="Seeds, e.g. 0-2"></label>
+        <label>Tries <input id="fTries" type="number" min="1" max="5" value="5" aria-label="Tries per seed"></label>
+        <label>Run on <select id="fBackend" aria-label="Where racers run"><option value="local">Local sim</option><option value="qm">QM sandboxes</option></select></label>
+        <label>Label <input id="fLabel" value="" size="7" placeholder="cold" aria-label="Race label"></label>
+      </form>
+      <div class="seg demo-only" role="group" aria-label="Playback speed">
         <button type="button" data-speed="1" aria-pressed="true">1×</button>
         <button type="button" data-speed="3" aria-pressed="false">3×</button>
       </div>
-      <button type="button" class="ghost" id="resetBtn">Reset dojo</button>
+      <button type="button" class="ghost demo-only" id="resetBtn">Reset dojo</button>
       <button type="button" class="primary" id="startBtn">Start sparring match</button>
     </div>
   </header>
@@ -421,6 +453,7 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
       <div class="card ledger">
         <h3>Training journal</h3>
         <div class="filter" id="journalFilter"></div>
+        <details class="ctx live-only" id="ctxBox" hidden><summary id="ctxSum">Recalled before the race</summary><pre id="ctxText"></pre></details>
         <div class="journal" id="journal"><p class="empty">No attempts yet. Start a sparring match and every hit and miss is recorded here, with the reason.</p></div>
       </div>
     </aside>
@@ -441,6 +474,49 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
 </div>
 
 <script>
+/* Live mode (default) reads the real race: serve.py APIs over runs/ and races/.
+   ?demo=1 runs the original offline simulation instead. */
+const DEMO=new URLSearchParams(location.search).has('demo');
+document.body.classList.add(DEMO?'demo':'live');
+/* ---------- sponsors ----------
+   Icons are each sponsor's own mark, saved under ui/sponsors/ so the page
+   makes no external requests. QM and GBrain fall back to a monogram tile
+   because no official icon source could be verified; give them an `icon`
+   path here once their real mark is to hand. */
+const SPONSORS=[
+  {name:'Anthropic', role:'Claude agents',     icon:'sponsors/anthropic.png'},
+  {name:'QM',        role:'Sandboxes',         mark:'QM'},
+  {name:'Memorable', role:'Training journal',  icon:'sponsors/memorable.png'},
+  {name:'GBrain',    role:'The scroll',        mark:'G'},
+  {name:'MuJoCo',    role:'Physics',           icon:'sponsors/mujoco.png'},
+];
+
+/* ---------- the gate ---------- */
+const gate=document.getElementById('gate');
+document.getElementById('sponsorList').innerHTML=SPONSORS.map(s=>{
+  const badge=s.icon
+    ? `<span class="spicon"><img src="${s.icon}" alt="" width="40" height="40" loading="lazy"></span>`
+    : `<span class="spicon mark">${s.mark||s.name[0]}</span>`;
+  return `<li>${badge}<b>${s.name}</b><span class="srole">${s.role}</span></li>`;
+}).join('');
+
+
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function openGate(){
+  if(gate.classList.contains('open'))return;
+  gate.classList.add('open');
+  setTimeout(()=>{gate.hidden=true;document.getElementById('startBtn').focus({preventScroll:true})},reduce?0:1600);
+}
+document.getElementById('enterBtn').addEventListener('click',openGate);
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!gate.hidden)openGate()});
+if(new URLSearchParams(location.search).has('nogate')){gate.classList.add('open');gate.hidden=true}
+
+</script>
+
+<script>
+/* ================= demo engine (?demo=1): simulated sparring ================= */
+(function demoEngine(){
+if(!DEMO)return;
 const STRATS=[
   {id:'place',name:'Place style',desc:'Carry it over the bin and set it down',time:[9,2]},
   {id:'drop', name:'Drop style', desc:'Hover over the rim and let go',time:[6,1.5]},
@@ -472,7 +548,6 @@ const TRIALS=5, F=160;
 let round=0, speed=1, running=false, records=[], wins={}, prevScroll=new Set(), scrollVersion=0, journalFilter='all';
 STRATS.forEach(s=>wins[s.id]=0);
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-
 /* ---------- build mats ---------- */
 const matsEl=document.getElementById('mats');
 const mats={};
@@ -727,38 +802,6 @@ function renderBelts(){
   }).join('');
 }
 
-/* ---------- sponsors ----------
-   Icons are each sponsor's own mark, saved under ui/sponsors/ so the page
-   makes no external requests. QM and GBrain fall back to a monogram tile
-   because no official icon source could be verified; give them an `icon`
-   path here once their real mark is to hand. */
-const SPONSORS=[
-  {name:'Anthropic', role:'Claude agents',     icon:'sponsors/anthropic.png'},
-  {name:'QM',        role:'Sandboxes',         mark:'QM'},
-  {name:'Memorable', role:'Training journal',  icon:'sponsors/memorable.png'},
-  {name:'GBrain',    role:'The scroll',        mark:'G'},
-  {name:'MuJoCo',    role:'Physics',           icon:'sponsors/mujoco.png'},
-];
-
-/* ---------- the gate ---------- */
-const gate=document.getElementById('gate');
-document.getElementById('sponsorList').innerHTML=SPONSORS.map(s=>{
-  const badge=s.icon
-    ? `<span class="spicon"><img src="${s.icon}" alt="" width="40" height="40" loading="lazy"></span>`
-    : `<span class="spicon mark">${s.mark||s.name[0]}</span>`;
-  return `<li>${badge}<b>${s.name}</b><span class="srole">${s.role}</span></li>`;
-}).join('');
-
-
-function openGate(){
-  if(gate.classList.contains('open'))return;
-  gate.classList.add('open');
-  setTimeout(()=>{gate.hidden=true;startBtn.focus({preventScroll:true})},reduce?0:1600);
-}
-document.getElementById('enterBtn').addEventListener('click',openGate);
-addEventListener('keydown',e=>{if(e.key==='Escape'&&!gate.hidden)openGate()});
-if(new URLSearchParams(location.search).has('nogate')){gate.classList.add('open');gate.hidden=true}
-
 /* ---------- swapping a mat's blueprint for a real sim ----------
    Each mat's preview lives in a .screen that a recorded attempt can take
    over. media matches result.json["media"] from the web artifact contract
@@ -801,6 +844,289 @@ tabs.forEach(([t,p])=>document.getElementById(t).addEventListener('click',()=>{
   tabs.forEach(([t2,p2])=>{document.getElementById(t2).setAttribute('aria-selected',t2===t);document.getElementById(p2).hidden=p2!==p});
 }));
 renderFilter();renderScore();renderBelts();Object.values(mats).forEach(updateMat);
+})();
+</script>
+<script>
+/* ================= live engine (default): the real race =================
+   Inputs  : Start -> POST /api/race {task, agents, seeds, tries, label}  (serve.py spawns run_race.py)
+   Outputs : GET /api/races, /api/races/<id> (plan, runs, leaderboard, close, context),
+             /api/runs/<run_id>/events, /api/brain (GBrain SKILL.md), /api/memory (Memorable episodes).
+   Media   : /<run_id>/attempt_<k>/live.jpg while running, then attempt.mp4 or key frames. */
+(function liveEngine(){
+if(DEMO)return;
+const $=id=>document.getElementById(id);
+const PAL=['place','drop','toss','push'];
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=(v,d=1)=>v==null||isNaN(v)?'–':(+v).toFixed(d);
+async function getJSON(u,opt){const r=await fetch(u,{cache:'no-store',...opt});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||`${r.status} ${u}`);return j}
+
+const startBtn=$('startBtn'), roundLabel=$('roundLabel'), verdict=$('verdict'), scoreBody=$('scoreBody'),
+  journal=$('journal'), scroll=$('scroll'), belts=$('belts'), matsEl=$('mats'), fRace=$('fRace');
+$('tabBelts').textContent='Race history';
+document.querySelector('thead tr').innerHTML='<th>Racer</th><th class="num">Solved</th><th class="num">Avg time</th><th class="num">Collisions</th><th class="num">Score</th>';
+startBtn.textContent='Start race';
+matsEl.innerHTML='<p class="empty">No race yet. Pick a task and press Start race: the planner writes one strategy per agent, then every agent writes code and runs it in MuJoCo.</p>';
+
+let backend='local', qm=null;
+let raceId=null, pinned=false, launchId=null, data=null, mats={}, agentKey='', filter='all', prevScroll=null, events={}, frameTick=0;
+
+/* ---------- inputs ---------- */
+getJSON('/api/tasks').then(j=>{$('fTask').innerHTML=j.tasks.map(t=>`<option value="${esc(t.id)}" title="${esc(t.text)}">${esc(t.id)}</option>`).join('')}).catch(()=>{});
+fRace.addEventListener('change',()=>{pinned=!!fRace.value;raceId=fRace.value||raceId;agentKey='';qm=null;
+  if(raceId)getJSON(`/api/races/${encodeURIComponent(raceId)}/qm`).then(j=>{qm=j}).catch(()=>{});tick()});
+$('launchForm').addEventListener('submit',e=>{e.preventDefault();start()});
+startBtn.addEventListener('click',start);
+async function start(){
+  if(launchId)return;
+  const body={task:$('fTask').value||'can_to_bin',agents:+$('fAgents').value,seeds:$('fSeeds').value.trim(),
+    tries:+$('fTries').value,label:$('fLabel').value.trim(),backend:$('fBackend').value};
+  startBtn.disabled=true;startBtn.textContent='Planning…';verdict.textContent='';
+  try{const j=await getJSON('/api/race',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    launchId=j.launch_id;pinned=false;raceId=null;agentKey='';backend=j.backend||'local';qm=null;
+    verdict.textContent=`Launched ${j.params.agents} agents on ${j.params.task}, seeds ${j.params.seeds}${backend==='qm'?' in QM sandboxes':''}. The planner is choosing strategies…`;
+  }catch(err){verdict.textContent=`Could not start: ${err.message}`;startBtn.disabled=false;startBtn.textContent='Start race'}
+}
+async function pollLaunch(){
+  if(!launchId)return;
+  try{const st=await getJSON(`/api/launch/${launchId}`);
+    if(st.race_id&&!pinned)raceId=st.race_id;
+    if(st.error)verdict.textContent=`QM launch failed: ${st.error}`;
+    else if(st.backend==='qm'&&st.result)verdict.textContent=qmMessage(st.result);
+    else if(!st.race_id)verdict.textContent=`Planning… ${st.log_tail.filter(l=>l&&!l.startsWith('{')).slice(-1)[0]||''}`;
+    if(!st.running){launchId=null;startBtn.disabled=false;startBtn.textContent='Start next race';
+      if(st.exit_code&&!st.race_id)verdict.textContent=`Race exited (${st.exit_code}): ${st.log_tail.slice(-3).join(' ')}`}
+  }catch{launchId=null;startBtn.disabled=false;startBtn.textContent='Start race'}
+}
+
+/* ---------- mats: one per racer (plan strategy) ---------- */
+function agentsOf(d){
+  const plan=(d.plan&&d.plan.strategies)||[];
+  const list=plan.map(s=>({id:s.agent_id,name:s.name,desc:s.approach||'',mode:s.mode||'explore'}));
+  d.runs.forEach(r=>{const a=(r.race||{}).agent_id;if(a&&!list.find(x=>x.id===a))list.push({id:a,name:(r.race||{}).strategy_name||a,desc:r.strategy||'',mode:''})});
+  return list;
+}
+function buildMats(agents){
+  mats={};matsEl.innerHTML='';
+  agents.forEach((a,i)=>{
+    const el=document.createElement('article');el.className='mat';
+    const pal=PAL[i%PAL.length];el.style.setProperty('--s',`var(--s-${pal})`);
+    el.innerHTML=`<span class="crown">Race winner</span>
+    <div class="mat-head"><h2>${esc(a.name)}</h2><span class="belt"><i style="background:var(--s-${pal})"></i><span>${esc(a.id)}${a.mode?' · '+esc(a.mode):''}</span></span></div>
+    <p class="desc" title="${esc(a.desc)}">${esc(a.desc)}</p>
+    <div class="screen"><span class="screen-tag">Waiting</span><div class="idle">waiting for first attempt</div></div>
+    <p class="caption">Waiting on the mat</p>
+    <div class="stats"><span><b data-in>0/0</b>solved</span><span><b data-time>–</b>s avg</span><span><b data-tries>0</b>tries</span></div>`;
+    matsEl.appendChild(el);
+    mats[a.id]={a,pal,el,screen:el.querySelector('.screen'),tag:el.querySelector('.screen-tag'),caption:el.querySelector('.caption'),
+      in:el.querySelector('[data-in]'),time:el.querySelector('[data-time]'),tries:el.querySelector('[data-tries]'),src:null,frames:null};
+  });
+}
+function mediaOf(run){
+  if(run.live)return {kind:'img',src:`/${run.run_id}/${run.live}?t=${Date.now()}`,tag:`Live sim · try ${run.current_attempt}`,live:true};
+  const last=run.attempts[run.attempts.length-1];if(!last||!last.media)return null;
+  const base=`/${run.run_id}/attempt_${last.k}/`, m=last.media;
+  if(m.video)return {kind:'video',src:base+m.video,poster:m.poster?base+m.poster:'',tag:`Replay · try ${last.k}`};
+  if(m.keyframes&&m.keyframes.length)return {kind:'frames',frames:m.keyframes.map(f=>base+f),tag:`Key frames · try ${last.k}`};
+  if(m.poster)return {kind:'img',src:base+m.poster,tag:`Final frame · try ${last.k}`};
+  return null;
+}
+function showMedia(m,md){
+  if(!md)return;
+  m.tag.textContent=md.tag;m.screen.classList.toggle('live',!!md.live);
+  const key=md.kind==='frames'?md.frames.join('|'):md.kind==='img'&&md.live?'live':md.src;
+  if(m.src===key&&md.kind!=='img')return;
+  if(md.kind==='img'&&md.live&&m.src==='live'){m.screen.querySelector('img').src=md.src;return}
+  m.src=key;m.frames=null;
+  [...m.screen.children].forEach(c=>{if(c!==m.tag)c.remove()});
+  if(md.kind==='video'){const v=document.createElement('video');v.src=md.src;if(md.poster)v.poster=md.poster;
+    v.autoplay=v.muted=v.loop=v.playsInline=true;v.setAttribute('playsinline','');m.screen.appendChild(v)}
+  else{const img=document.createElement('img');img.alt=`${m.a.name} sim`;img.src=md.kind==='frames'?md.frames[0]:md.src;
+    if(md.kind==='frames')m.frames=md.frames;m.screen.appendChild(img)}
+}
+setInterval(()=>{frameTick++;Object.values(mats).forEach(m=>{if(m.frames){const img=m.screen.querySelector('img');if(img)img.src=m.frames[frameTick%m.frames.length]}})},800);
+
+const EV={run_started:e=>'Agent started, reading the scene',attempt_started:e=>`Try ${e.attempt}: asking the model`,
+  model_request:e=>`Try ${e.attempt}: model is writing run(robot)…`,model_response:e=>e.error?`Model error: ${e.error}`:`Try ${e.attempt}: reply in ${num(e.latency_s)} s`,
+  code_generated:e=>`Try ${e.attempt}: code written, running in MuJoCo`,
+  attempt_finished:e=>{const r=e.result||{};return r.success?`Try ${e.attempt}: in the bin, ${num(r.time_s)} s`:`Try ${e.attempt}: missed${r.error?' ('+String(r.error).split('\n')[0].slice(0,90)+')':''}`},
+  run_finished:e=>e.status==='solved'?`Solved at try ${e.solved_at}`:`Finished: ${e.status}`};
+async function pollEvents(run){
+  const st=events[run.run_id]||(events[run.run_id]={next:0,last:null});
+  if(st.done)return st.last;
+  try{const j=await getJSON(`/api/runs/${run.run_id}/events?since=${st.next}`);st.next=j.next;
+    const e=j.events.filter(x=>EV[x.type]).pop();if(e)st.last=`Seed ${run.seed} · `+EV[e.type](e);
+    if(j.events.some(x=>x.type==='run_finished'))st.done=true;}catch{}
+  return st.last;
+}
+
+/* ---------- QM workers (backend=qm): shape from qm.launch.qm_status, matched loosely ---------- */
+function qmWorker(a){
+  if(!qm||!qm.available||!qm.workers)return null;
+  const w=Array.isArray(qm.workers)?qm.workers.find(x=>[x.agent_id,x.strategy,x.name].includes(a.id)):qm.workers[a.id];
+  return w?{...w,status:w.status||(w.solved?'solved':w.attempts?`try ${w.attempts}`:'waiting')}:null;
+}
+function qmMessage(launch){const q=launch&&launch.qm;return q&&q.status==='manual'&&q.message?
+  `QM race prepared. Send this to the QM root agent (QM web UI): “${q.message}”. Workers report every attempt to the tracker live.`:''}
+let qmProbed=null;
+async function pollQM(){
+  if(!raceId)return;
+  const probe=qmProbed!==raceId;qmProbed=raceId;  // one probe per race, then only while QM answers
+  if(!probe&&backend!=='qm'&&!(qm&&qm.available))return;
+  try{qm=await getJSON(`/api/races/${encodeURIComponent(raceId)}/qm`)}catch{qm=null}
+}
+
+/* ---------- scoring (tracker leaderboard, else local) ---------- */
+function localScores(agents,runs){
+  return agents.map(a=>{const rs=runs.filter(r=>(r.race||{}).agent_id===a.id);
+    const ok=rs.filter(r=>r.status==='solved'), att=rs.flatMap(r=>r.attempts), wins=att.filter(x=>x.success);
+    const t=wins.length?wins.reduce((s,x)=>s+(x.time_s||0),0)/wins.length:null;
+    const tries=ok.length?ok.reduce((s,r)=>s+r.solved_at,0)/ok.length:null;
+    return {agent_id:a.id,name:a.name,solved:ok.length,seeds:rs.length,time:t,coll:rs.length?att.reduce((s,x)=>s+(x.collisions||0),0)/rs.length:0,
+      score:rs.length?Math.round(ok.length/rs.length*100-(tries?tries*5:0)):null,tries:att.length}});
+}
+function scores(d,agents){
+  const lb=d.leaderboard&&d.leaderboard.scores;
+  if(lb&&lb.length)return lb.map(s=>({agent_id:s.agent_id,name:(agents.find(a=>a.id===s.agent_id)||{}).name||s.persona||s.agent_id,
+    solved:s.seeds_solved,seeds:s.seeds_target,time:s.mean_time_s,coll:s.collisions_per_seed,score:Math.round(s.score),tries:s.attempts_total,src:'tracker'}));
+  return localScores(agents,d.runs).sort((a,b)=>(b.score??-1e9)-(a.score??-1e9));
+}
+
+/* ---------- render one race ---------- */
+async function render(d){
+  const agents=agentsOf(d), key=agents.map(a=>a.id).join(',');
+  if(!agents.length){matsEl.innerHTML='<p class="empty">Planner is choosing strategies…</p>';return}
+  if(key!==agentKey){agentKey=key;buildMats(agents);renderFilter(agents)}
+  const tr=d.tracker||{}, label=tr.label||(d.race&&d.race.label)||'';
+  const running=d.runs.some(r=>r.status==='running');
+  roundLabel.textContent=`${label?label+' · ':''}${running?'racing':d.close?'closed':d.race?'finished':'starting'}`;
+  const sc=scores(d,agents), winner=(d.close&&d.close.winner&&d.close.winner.agent_id)||(d.leaderboard&&d.leaderboard.winner&&(d.leaderboard.winner.agent_id||d.leaderboard.winner));
+  for(const a of agents){
+    const m=mats[a.id], rs=d.runs.filter(r=>(r.race||{}).agent_id===a.id);
+    const focus=rs.find(r=>r.status==='running')||rs.slice().sort((x,y)=>(y.updated_at||0)-(x.updated_at||0))[0];
+    const s=sc.find(x=>x.agent_id===a.id)||{};
+    m.in.textContent=`${s.solved??0}/${s.seeds??rs.length}`;m.time.textContent=num(s.time);m.tries.textContent=rs.reduce((n,r)=>n+r.attempts.length,0);
+    m.el.classList.toggle('champion',winner===a.id);
+    const w=qmWorker(a);
+    if(w)m.tag.textContent=`QM · ${w.status||w.state||'worker'}`;
+    if(!focus){if(w)m.caption.textContent=`QM sandbox ${w.sandbox||w.container||w.id||''}: ${w.status||w.state||'starting'}`;continue}
+    showMedia(m,mediaOf(focus));if(w)m.tag.textContent=`QM · ${w.status||w.state||'worker'} · `+m.tag.textContent;
+    const cap=await pollEvents(focus);if(cap)m.caption.textContent=cap;
+    const prev=m.lastDone, done=focus.attempts.length;
+    if(prev!=null&&done>prev){const ok=focus.attempts[done-1].success;m.el.classList.add(ok?'hit':'miss');setTimeout(()=>m.el.classList.remove('hit','miss'),700)}
+    m.lastDone=done;
+  }
+  scoreBody.innerHTML=sc.map(s=>{const pal=(mats[s.agent_id]||{}).pal||'place';return `<tr><td><span class="dot" style="color:var(--s-${pal});background:var(--s-${pal})"></span>${esc(s.name)}</td><td class="num">${s.solved??0}/${s.seeds??0}</td><td class="num">${s.time!=null?num(s.time)+' s':'–'}</td><td class="num">${num(s.coll,1)}</td><td class="num"><b>${s.score??'–'}</b></td></tr>`}).join('');
+  const lines=(d.close&&d.close.lessons&&d.close.lessons.lines)||[];
+  if(d.close&&winner){const w=sc.find(x=>x.agent_id===winner)||{};verdict.innerHTML=`${esc(w.name||winner)} wins: ${w.solved}/${w.seeds} seeds solved${w.time!=null?', '+num(w.time)+' s average':''}. The winning code is distilled into the scroll.`+lines.map(l=>`<span class="lesson">${esc(l)}</span>`).join('')}
+  else if(d.race&&d.race.local_ranking){const b=d.race.local_ranking[0];verdict.textContent=b?`${b.strategy} leads with ${b.solved}/${b.seeds} solved (no tracker, local ranking).`:''}
+  else if(!launchId){const done=d.runs.filter(r=>r.status!=='running').length;
+    verdict.textContent=d.runs.length?`Racing: ${done} of ${d.runs.length} racers finished.`:qmMessage(d.launch)}
+  renderJournal(d,agents);renderContext(d);
+}
+
+/* ---------- journal: every attempt, with tracker failure modes + memory tags ---------- */
+function renderFilter(agents){
+  const el=$('journalFilter');
+  el.innerHTML=[{id:'all',name:'All'},...agents].map(o=>`<button type="button" data-f="${esc(o.id)}" aria-pressed="${filter===o.id}">${esc(o.name)}</button>`).join('');
+}
+$('journalFilter').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;filter=b.dataset.f;
+  [...$('journalFilter').children].forEach(x=>x.setAttribute('aria-pressed',x===b));if(data)renderJournal(data,agentsOf(data))});
+function reason(r,fm){
+  if(r.success)return `In the bin, ${num(r.time_s)} s${r.collisions?`, ${r.collisions} collisions`:''}`;
+  if(fm)return fm.replace(/_/g,' ')+(r.error?`: ${String(r.error).split('\n')[0].slice(0,120)}`:'');
+  if(r.error)return String(r.error).split('\n')[0].slice(0,140);
+  if(r.dropped)return 'Dropped it on the way';
+  if(r.lifted===false)return 'Never lifted the item';
+  return 'Missed the bin';
+}
+function renderJournal(d,agents){
+  const fms={};(d.attempts||[]).forEach(a=>{fms[`${a.agent_id}|${a.seed}|${a.attempt}`]=a.failure_mode});
+  const rows=[];
+  d.runs.forEach(run=>{const ag=(run.race||{}).agent_id, a=agents.find(x=>x.id===ag)||{name:ag};
+    if(filter!=='all'&&ag!==filter)return;
+    run.attempts.forEach(at=>rows.push({run,ag,a,at,fm:fms[`${ag}|${run.seed}|${at.k}`]}))});
+  // QM workers run in sandboxes: their attempts reach us only through the tracker
+  const seen=new Set(rows.map(r=>`${r.ag}|${r.run.seed}|${r.at.k}`));
+  (d.attempts||[]).forEach(t=>{const key=`${t.agent_id}|${t.seed}|${t.attempt}`;
+    if(seen.has(key)||(filter!=='all'&&t.agent_id!==filter))return;
+    const a=agents.find(x=>x.id===t.agent_id)||{name:t.agent_id};
+    rows.push({run:{seed:t.seed,updated_at:t.recorded_at||t.ts||0,hints:null},ag:t.agent_id,a,at:{...t,k:t.attempt},fm:t.failure_mode})});
+  if(!rows.length){journal.innerHTML='<p class="empty">No attempts yet. Every try lands here with why it hit or missed.</p>';return}
+  rows.sort((x,y)=>(y.run.updated_at||0)-(x.run.updated_at||0)||y.at.k-x.at.k);
+  journal.innerHTML=rows.slice(0,120).map(({run,ag,a,at,fm})=>{
+    const pal=(mats[ag]||{}).pal||'place';
+    const recall=at.k===1&&run.hints&&run.hints.context?'<span class="recall">Started with recalled memory (GBrain skill + Memorable)</span>':'';
+    return `<div class="entry ${at.success?'ok':'bad'}" style="--s:var(--s-${pal})"><span class="mark" aria-label="${at.success?'Hit':'Miss'}">${at.success?'✓':'✗'}</span><div><span class="who">${esc(a.name)}</span><span class="rnd">S${run.seed} T${at.k}</span><br><span class="why">${esc(reason(at,fm))}</span>${recall}</div></div>`;
+  }).join('');
+}
+async function renderContext(d){
+  const box=$('ctxBox');
+  if(!d.context&&!d.memory){box.hidden=true;return}
+  box.hidden=false;
+  const n=d.context?d.context.split('\n').filter(Boolean).length:0;
+  $('ctxSum').textContent=`Recalled before the race${n?` (${n} lines)`:''}`;
+  $('ctxText').textContent=(d.context||'')+(d.memory?`\n\nmemory.json:\n${JSON.stringify(d.memory,null,1).slice(0,3000)}`:'');
+}
+
+/* ---------- the scroll: GBrain skill, markdown ---------- */
+function md(text){
+  text=text.replace(/^---\n[\s\S]*?\n---\n/,'');
+  const out=[];let list=false,code=false,buf=[];
+  const inline=s=>esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+  const close=()=>{if(list){out.push('</ul>');list=false}};
+  for(const line of text.split('\n')){
+    if(line.startsWith('```')){if(code){out.push(`<pre>${esc(buf.join('\n'))}</pre>`);buf=[];code=false}else{close();code=true}continue}
+    if(code){buf.push(line);continue}
+    if(/^<!--.*-->$/.test(line.trim()))continue;
+    let m;
+    if((m=line.match(/^#\s+(.*)/))){close();out.push(`<p class="md-h1">${inline(m[1])}</p>`)}
+    else if((m=line.match(/^#{2,6}\s+(.*)/))){close();out.push(`<p class="md-h2">${inline(m[1])}</p>`)}
+    else if((m=line.match(/^\s*[-*]\s+(.*)/))){if(!list){out.push('<ul>');list=true}out.push(`<li data-l="${esc(m[1])}">${inline(m[1])}</li>`)}
+    else if(line.trim()){close();out.push(`<p class="md-p">${inline(line)}</p>`)}
+  }
+  close();return out.join('');
+}
+async function renderScroll(){
+  try{const j=await getJSON('/api/brain');
+    if(!j.markdown){scroll.innerHTML='<p class="empty">GBrain has no skill yet. Finish a race and it gets distilled here.</p>';return}
+    scroll.innerHTML=`<p class="ver">${esc(j.path)} · updated ${new Date(j.mtime*1000).toLocaleString()}</p>`+md(j.markdown);
+    const now=new Set([...scroll.querySelectorAll('li')].map(li=>li.dataset.l));
+    if(prevScroll)scroll.querySelectorAll('li').forEach(li=>{if(!prevScroll.has(li.dataset.l))li.classList.add('fresh')});
+    prevScroll=now;
+  }catch{}
+}
+
+/* ---------- race history (tracker summaries + local races/) ---------- */
+function renderHistory(list){
+  if(!list.length){belts.innerHTML='<p class="empty">No races yet.</p>';return}
+  belts.innerHTML=list.slice(0,12).map(r=>{const t=r.tracker||{}, s=t.summary||{}, l=r.local||{};
+    const rate=s.solve_rate!=null?Math.round(s.solve_rate*100):null;
+    return `<div class="beltcard"><h4>${esc(t.label||l.label||r.race_id)}</h4>
+      <div class="beltbar" style="background:linear-gradient(90deg,var(--riso) ${rate??0}%,transparent ${rate??0}%)"></div>
+      <p><b>${esc(s.task||t.task||l.task||'')}</b> · ${esc(t.status||(l.closed?'closed':l.done?'finished':'running'))}</p>
+      <p>${rate!=null?`${s.seeds_solved}/${s.seeds_attempted} seeds solved, ${Math.round((s.first_try_rate||0)*100)}% first try`:`${l.agents||'?'} agents`}${s.winner?` · winner ${esc(s.winner)}`:''}</p>
+      <p style="font-family:var(--mono);font-size:10.5px">${esc(r.race_id)}</p></div>`}).join('');
+}
+
+/* ---------- loop ---------- */
+let busy=false, n=0;
+async function tick(){
+  if(busy)return;busy=true;
+  try{
+    await pollLaunch();
+    if(n%4===0){const j=await getJSON('/api/races');const list=j.races||[];
+      const cur=fRace.value;
+      fRace.innerHTML='<option value="">latest</option>'+list.map(r=>`<option value="${esc(r.race_id)}">${esc(((r.tracker||{}).label||(r.local||{}).label||'')+' '+r.race_id)}</option>`).join('');
+      fRace.value=cur;renderHistory(list);
+      if(!pinned&&!launchId&&list[0])raceId=list[0].race_id;}
+    if(n%8===0)renderScroll();
+    if(raceId&&n%2===0)await pollQM();
+    if(raceId){data=await getJSON(`/api/races/${encodeURIComponent(raceId)}`);await render(data)}
+  }catch(err){console.warn('[dojo]',err)}
+  finally{busy=false;n++}
+}
+tick();setInterval(tick,1500);
+})();
 </script>
 </body>
 </html>
