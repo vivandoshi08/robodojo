@@ -1,29 +1,25 @@
-import type { ParamKey } from "./types.ts";
+import { resolve } from "node:path";
+
+const repoRoot = resolve(import.meta.dir, "../..");
 
 export const config = {
-  /** Where strategy skills live: skills/<strategy>/SKILL.md. Must be inside a git repo. */
-  skillsDir: process.env.RACE_BRAIN_SKILLS_DIR ?? "skills",
+  repoRoot,
 
-  /** Until Memorable's API is wired up, episodes are read from this JSON file. */
-  memorableFixture: process.env.MEMORABLE_FIXTURE ?? "fixtures/episodes.json",
+  /** The runs/ tree the simulations write (CLAUDE.md §8). */
+  runsDir: process.env.RACE_RUNS_DIR ?? resolve(repoRoot, "runs"),
 
-  /** Bin positions are snapped to these steps so nearby throws count as one scenario. */
-  bucket: { distanceM: 0.5, angleDeg: 15 },
+  /** GBrain's skill: the distilled procedural memory future agents start from. */
+  skill: "trash-to-bin",
+  skillsDir: resolve(import.meta.dir, "../skills"),
 
-  /** Decimal places the skill must use for each parameter (the rule judge matches these exactly). */
-  precision: { release_height_m: 2, toss_velocity_mps: 1, grasp_angle_deg: 0 } satisfies Record<ParamKey, number>,
+  /** GBrain page the skill is also saved to. */
+  page: "procedures/trash-to-bin",
 
-  /** Slack added around the successful range before judging, so near-misses of the range still pass. */
-  margin: { release_height_m: 0.03, toss_velocity_mps: 0.1, grasp_angle_deg: 3 } satisfies Record<ParamKey, number>,
-
-  /** --split 1:1:1 needs >= 5 tasks in the selection slice, so >= 15 total. */
-  minTasks: 15,
-
-  /** Past misses shown in each benchmark task, like Memorable's mid-race recall. */
-  maxFailuresInPrompt: 3,
-
-  /** Episodes quoted as evidence on a verdict page, per side. */
-  evidencePerSide: 5,
+  /** Bin distances (from the robot base) that split the rules, in meters. */
+  distanceSplitM: 0.5,
 
   skillopt: { split: "1:1:1", maxCostUsd: 5 },
 };
+
+export const skillDir = resolve(config.skillsDir, config.skill);
+export const skillPath = resolve(skillDir, "SKILL.md");

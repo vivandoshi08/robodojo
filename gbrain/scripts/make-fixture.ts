@@ -1,68 +1,61 @@
-// Generates fixtures/episodes.json: fake Memorable episodes so the GBrain
-// side can be built and demoed before the real race runs. Deterministic.
+// Writes a FAKE runs/ tree in the CLAUDE.md §8 layout (summary.json,
+// attempt_<k>/result.json + policy.py) to try the GBrain side before real
+// races exist. Strategy names and success rates are made up. Output: fixtures/runs/.
+//
+//   bun run fixture && RACE_RUNS_DIR=fixtures/runs bun src/cli.ts distill --print
 
-let seed = 42;
-const rand = () => ((seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32);
-const pick = <T>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)]!;
-const round = (v: number, p: number) => Number(v.toFixed(p));
+import { mkdir, rm } from "node:fs/promises";
+import { join } from "node:path";
 
-const trash = ["can", "plastic bottle", "paper ball", "glass jar", "foam cup"] as const;
-const distances = [1.0, 1.5, 2.0, 2.5];
-const angles = [-30, -15, 0, 15, 30];
-const agents = [
-  { agent_id: "agent-1", strategy: "arc-toss", skill: 0.75 },
-  { agent_id: "agent-2", strategy: "flat-throw", skill: 0.5 },
-  { agent_id: "agent-3", strategy: "flat-throw", skill: 0.4 },
-];
-const missReasons = {
-  short: "Underestimated drag; throw fell short.",
-  long: "Too much velocity for a dense item; overshot.",
-  wide: "Grasp angle not rotated enough toward the bin.",
-  rim_out: "Flat trajectory bounced off the rim.",
-} as const;
+const OUT = "fixtures/runs";
+let seed = 7;
+const rand = () => (seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32;
 
-const rows = [];
-let id = 0;
-for (const race_id of ["race-001", "race-002", "race-003"]) {
-  for (const a of agents) {
-    for (let attempt = 1; attempt <= 12; attempt++) {
-      const trash_type = pick(trash);
-      const bin = { distance_m: pick(distances), angle_deg: pick(angles) };
-      // "Ideal" throw for this scenario, plus agent-dependent noise.
-      const ideal = {
-        release_height_m: 0.7 + bin.distance_m * 0.1,
-        toss_velocity_mps: 1.4 + bin.distance_m * 0.7 + (trash_type === "paper ball" || trash_type === "foam cup" ? 0.4 : 0),
-        grasp_angle_deg: bin.angle_deg * 1.1,
-      };
-      const noise = 1 - a.skill;
-      const params = {
-        release_height_m: round(ideal.release_height_m + (rand() - 0.5) * 0.3 * noise, 2),
-        toss_velocity_mps: round(ideal.toss_velocity_mps + (rand() - 0.5) * 1.2 * noise, 1),
-        grasp_angle_deg: Math.round(ideal.grasp_angle_deg + (rand() - 0.5) * 16 * noise),
-      };
-      const inBin = rand() < a.skill;
-      const outcome = inBin ? "in_bin" : pick(Object.keys(missReasons) as (keyof typeof missReasons)[]);
-      rows.push({
-        episode_id: `ep-${++id}`,
-        race_id,
-        agent_id: a.agent_id,
-        strategy: a.strategy,
-        attempt,
-        trash_type,
-        bin_distance_m: bin.distance_m,
-        bin_angle_deg: bin.angle_deg,
-        ...params,
-        outcome,
-        score: inBin ? 10 : 0,
-        reason: inBin
-          ? pick(["High arc dropped it straight in.", "Matched velocity to distance.", "Adjusted after last miss."])
-          : missReasons[outcome as keyof typeof missReasons],
+const tasks = ["paper_to_bin", "bottle_to_bin", "can_to_bin"];
+const strategies = ["pick-and-place", "drop", "toss", "push-off-edge"];
+// Made-up chance each strategy solves an attempt, per item.
+const skill: Record<string, Record<string, number>> = {
+  paper_to_bin: { "pick-and-place": 0.4, drop: 0.3, toss: 0.7, "push-off-edge": 0.2 },
+  bottle_to_bin: { "pick-and-place": 0.6, drop: 0.7, toss: 0.2, "push-off-edge": 0.3 },
+  can_to_bin: { "pick-and-place": 0.7, drop: 0.6, toss: 0.4, "push-off-edge": 0.5 },
+};
+const code = (s: string) => `def run(robot):\n    s = robot.get_state()\n    # (fake ${s} policy)\n    robot.open_gripper()\n`;
+const json = (path: string, data: unknown) => Bun.write(path, JSON.stringify(data, null, 2) + "\n");
+
+await rm(OUT, { recursive: true, force: true });
+let n = 0;
+for (const task of tasks) {
+  for (const s of [0, 1, 2, 3, 4]) {
+    const bin_center = [0.3 + rand() * 0.3, 0.2 + rand() * 0.4, 0]; // randomized bin, per the pitch
+    const far = Math.hypot(bin_center[0]!, bin_center[1]!) >= 0.5;
+    const stamp = `20260927-15${String(n++).padStart(2, "0")}00`;
+    for (const strategy of strategies) {
+      const run_id = `${stamp}-${task}-s${s}-${strategy}`;
+      let p = skill[task]![strategy]!;
+      if (strategy === "toss") p += far ? 0.2 : -0.3; // toss better far away
+      if (strategy === "pick-and-place") p += far ? -0.3 : 0.2; // place better close
+      let solved_at: number | null = null;
+      for (let k = 1; k <= 5 && solved_at === null; k++) {
+        const success = rand() < p;
+        const lifted = success || rand() < 0.7;
+        const result = {
+          task, seed: s, success, time_s: Number((5 + rand() * 8).toFixed(2)),
+          collisions: Math.floor(rand() * 3), energy_j: Number((20 + rand() * 30).toFixed(2)),
+          dropped: !success && lifted && rand() < 0.4, lifted, error: null,
+          bin_center, bin_knocked_over: !success && strategy !== "pick-and-place" && rand() < 0.15,
+        };
+        await mkdir(join(OUT, run_id, `attempt_${k}`), { recursive: true });
+        await json(join(OUT, run_id, `attempt_${k}`, "result.json"), result);
+        await Bun.write(join(OUT, run_id, `attempt_${k}`, "policy.py"), code(strategy));
+        if (success) solved_at = k;
+      }
+      await json(join(OUT, run_id, "summary.json"), {
+        task, seed: s, model: "fake", strategy: `(fake ${strategy} card)`,
+        status: solved_at ? "solved" : "failed", solved_at,
       });
     }
   }
 }
-
-await Bun.write("fixtures/episodes.json", JSON.stringify(rows, null, 2) + "\n");
-console.log(`Wrote ${rows.length} episodes to fixtures/episodes.json`);
+console.log(`Wrote ${n * strategies.length} fake runs to ${OUT}/`);
 
 export {};
