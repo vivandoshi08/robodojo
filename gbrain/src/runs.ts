@@ -7,13 +7,14 @@ import { config } from "./config.ts";
 import type { Attempt, AttemptResult, Run, RunSummary } from "./types.ts";
 
 /**
- * Strategy name: the run_id's optional slug ("<stamp>-<task>-s<seed>-<slug>",
- * CLAUDE.md §8), else the first line of the strategy card.
+ * Strategy name: the first line of the strategy card in summary.json, so
+ * racers with the same card group together. The run_id slug is only a
+ * fallback: agent.py cuts it to 20 chars and adds "-2", "-3" on collisions.
  */
 function strategyName(card: string | null, runId: string): string {
-  const fromId = runId.match(/-s\d+-(.+)$/)?.[1];
-  if (fromId) return fromId;
-  return card?.trim().split("\n")[0]?.slice(0, 40) || "no-strategy";
+  const firstLine = card?.trim().split("\n")[0]?.replace(/^#+\s*/, "").trim();
+  if (firstLine) return firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
+  return runId.match(/-s\d+-(.+?)(?:-\d+)?$/)?.[1] ?? "no-strategy";
 }
 
 /** "paper_to_bin" → "paper", "can_to_far_bin" → "can". */

@@ -50,7 +50,7 @@ for (const task of tasks) {
         if (success) solved_at = k;
       }
       await json(join(OUT, run_id, "summary.json"), {
-        task, seed: s, model: "fake", strategy: `(fake ${strategy} card)`,
+        task, seed: s, model: "fake", strategy: `${strategy}\n(fake strategy card)`,
         status: solved_at ? "solved" : "failed", solved_at,
       });
     }

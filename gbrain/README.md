@@ -44,4 +44,4 @@ For distance rules ("toss works past 50 cm") and the knocked-over score, `result
 - `bin_center`: `[x, y, z]`, already available from `robot.get_state()["bin"]["center"]`
 - `bin_knocked_over`: `true` / `false`
 
-Strategy names come from the run_id's slug (`<stamp>-<task>-s<seed>-<strategy>`, CLAUDE.md §8).
+Strategy names come from the first line of the strategy card in `summary.json`, so every racer using the same card is grouped together.
