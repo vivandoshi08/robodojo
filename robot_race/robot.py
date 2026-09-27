@@ -6,6 +6,7 @@ null-space pull toward the home posture) and feed the result to the Panda's posi
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
 
 import mujoco
 import numpy as np
@@ -26,6 +27,19 @@ def _yaw_R(yaw_deg: float) -> np.ndarray:
     return Rz @ R0
 
 
+def _jsonable(v):
+    """Call args as JSON (np arrays/scalars -> lists/numbers, anything else -> repr)."""
+    if isinstance(v, np.ndarray):
+        v = v.tolist()
+    if isinstance(v, (list, tuple)):
+        return [_jsonable(x) for x in v]
+    if isinstance(v, np.generic):
+        v = v.item()
+    if isinstance(v, float):
+        return round(v, 5)
+    return v if isinstance(v, (int, bool, str)) or v is None else repr(v)
+
+
 class SimRobot:
     def __init__(self, env: Env):
         self.env, self.m, self.d = env, env.model, env.data
@@ -34,7 +48,8 @@ class SimRobot:
         self._lo = self.m.jnt_range[[self.m.joint(f"joint{i}").id for i in range(1, 8)], 0]
         self._hi = self.m.jnt_range[[self.m.joint(f"joint{i}").id for i in range(1, 8)], 1]
         self.yaw_deg = self._current_yaw()
-        self.call_log: list[str] = []
+        self.call_log: list[str] = []   # human-readable, kept for result.json["calls"] (back-compat)
+        self.call_trace: list[dict] = []  # structured, sim-timed: the executor writes it to calls.json
         # Start from an exact pose-matched command so the first move is smooth.
         self._q_cmd = self._ik(self.env.tcp_pos(), _yaw_R(self.yaw_deg), self._q_cmd)
 
@@ -82,8 +97,36 @@ class SimRobot:
             self.d.ctrl[:7] = self._q_cmd
             self.env.step(int(CONTROL_DT / self.m.opt.timestep))
 
+    def _snap(self) -> dict:
+        width = float(self.d.qpos[self.m.joint("finger_joint1").qposadr[0]]
+                      + self.d.qpos[self.m.joint("finger_joint2").qposadr[0]])
+        return dict(tcp=[round(float(v), 4) for v in self.env.tcp_pos()], gripper_width=round(width, 4),
+                    holding=bool(self.env.holding()))
+
+    @contextmanager
+    def _track(self, call: str, **args):
+        """Structured call_trace entry with sim times (s since episode start) and TCP/gripper before/after.
+        An exception inside the call (e.g. TimeLimit) is recorded on the entry and re-raised."""
+        before = self._snap()
+        e = dict(i=len(self.call_trace), call=call, args={k: _jsonable(v) for k, v in args.items()},
+                 t_start=round(self.env.sim_time, 4), t_end=None, tcp_before=before["tcp"])
+        self.call_trace.append(e)
+        try:
+            yield e
+        except BaseException as ex:
+            e["error"] = f"{type(ex).__name__}: {ex}"
+            raise
+        finally:
+            after = self._snap()
+            e.update(t_end=round(self.env.sim_time, 4), tcp_after=after["tcp"],
+                     gripper_width_after=after["gripper_width"], holding_after=after["holding"])
+
     # ---------- public API (see interfaces.API_DOC) ----------
     def get_state(self) -> dict:
+        with self._track("get_state"):
+            return self._get_state()
+
+    def _get_state(self) -> dict:
         env, lay = self.env, self.env.layout
         width = float(self.d.qpos[self.m.joint("finger_joint1").qposadr[0]]
                       + self.d.qpos[self.m.joint("finger_joint2").qposadr[0]])
@@ -100,10 +143,15 @@ class SimRobot:
         }
 
     def get_image(self, view: str = "front", width: int = 320, height: int = 240) -> np.ndarray:
-        return self.env.render(view, width, height)
+        with self._track("get_image", view=view, width=width, height=height):
+            return self.env.render(view, width, height)
 
     def move_to(self, xyz, speed: float = 0.2) -> list:
         self.call_log.append(f"move_to({list(np.round(xyz, 3))}, speed={speed})")
+        with self._track("move_to", xyz=xyz, speed=speed):
+            return self._move_to(xyz, speed)
+
+    def _move_to(self, xyz, speed) -> list:
         target = self._clamp(xyz)
         speed = float(np.clip(speed, 0.02, 1.0))
         start = self.env.tcp_pos()
@@ -122,6 +170,10 @@ class SimRobot:
 
     def rotate_gripper(self, yaw_deg: float) -> None:
         self.call_log.append(f"rotate_gripper({yaw_deg})")
+        with self._track("rotate_gripper", yaw_deg=yaw_deg):
+            self._rotate(yaw_deg)
+
+    def _rotate(self, yaw_deg) -> None:
         yaw_deg = ((float(yaw_deg) + 90) % 180) - 90  # parallel gripper is symmetric: keep in [-90, 90)
         pos = self.env.tcp_pos()
         start, n = self.yaw_deg, 25
@@ -132,14 +184,17 @@ class SimRobot:
 
     def open_gripper(self) -> None:
         self.call_log.append("open_gripper()")
-        self.d.ctrl[7] = 255
-        self._steps(0.4)
+        with self._track("open_gripper"):
+            self.d.ctrl[7] = 255
+            self._steps(0.4)
 
     def close_gripper(self) -> None:
         self.call_log.append("close_gripper()")
-        self.d.ctrl[7] = 0
-        self._steps(0.6)
+        with self._track("close_gripper"):
+            self.d.ctrl[7] = 0
+            self._steps(0.6)
 
     def wait(self, seconds: float) -> None:
         self.call_log.append(f"wait({seconds})")
-        self._steps(max(0.0, float(seconds)))
+        with self._track("wait", seconds=seconds):
+            self._steps(max(0.0, float(seconds)))

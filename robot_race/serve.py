@@ -6,6 +6,7 @@ Static:  GET /<run_id>/attempt_<k>/attempt.mp4 ...  (HTTP Range -> 206, so <vide
 API:     GET /api/runs                              -> manifest (same as runs/index.json, built live)
          GET /api/runs/<run_id>                     -> summary.json (synthesized for run_policy dirs)
          GET /api/runs/<run_id>/events?since=<n>    -> {"events": [...lines n..], "next": <n'>}
+         GET /api/runs/<run_id>/transcript          -> {"turns": [transcript.jsonl lines]} (one per model call)
 All responses: Access-Control-Allow-Origin: *. JSON / events / live.jpg: Cache-Control: no-store.
 """
 from __future__ import annotations
@@ -145,6 +146,9 @@ class Handler(SimpleHTTPRequestHandler):
             except ValueError:
                 return self._error(HTTPStatus.BAD_REQUEST, "since must be an int", head)
             return self._json(read_events(os.path.join(run_dir, "events.jsonl"), since), head=head)
+        if len(parts) == 2 and parts[1] == "transcript":
+            turns = read_events(os.path.join(run_dir, "transcript.jsonl"))["events"]
+            return self._json({"turns": turns}, head=head)
         return self._error(HTTPStatus.NOT_FOUND, "not found", head)
 
     # -------------------------------------------------------- static files with Range

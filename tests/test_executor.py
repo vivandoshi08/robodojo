@@ -22,7 +22,7 @@ def _check_keys(res, out):
     assert set(RESULT_KEYS + EXTRA) <= set(res)
     with open(os.path.join(out, "result.json")) as f:
         assert set(RESULT_KEYS + EXTRA) <= set(json.load(f))
-    assert set(res["media"]) == {"video", "poster", "keyframes", "trajectory", "live"}
+    assert set(res["media"]) == {"video", "poster", "keyframes", "trajectory", "live", "calls_json", "provenance"}
 
 
 def test_reference_policy_success_with_video(tmp_path):
