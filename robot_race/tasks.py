@@ -35,9 +35,10 @@ class TimeLimit(Exception):
 
 class Env:
     def __init__(self, task: str, seed: int = 0, record: bool = True, video_view: str = "front",
-                 video_fps: float | None = None):
+                 video_fps: float | None = None, live_path: str | None = None, live_hz: float = 2.0):
         """record=False: no frames at all (fastest, for scoring only).
-        video_fps: frames per sim-second; use ~0.5 for key frames only (fast races)."""
+        video_fps: frames per sim-second; use ~0.5 for key frames only (fast races).
+        live_path: if set, a 320x240 front-camera JPEG is written there atomically at ~live_hz (sim time)."""
         if task not in TASKS:
             raise KeyError(f"unknown task {task!r}; choose from {list(TASKS)}")
         self.task, self.seed, self.cfg = task, seed, TASKS[task]
@@ -79,6 +80,12 @@ class Env:
         self._next_frame_t = 0.0
         self.collisions, self.energy_j, self.max_item_z = 0, 0.0, self.item_pos()[2]
         self._touching: set = set()
+        self._traj_t: list[float] = []
+        self._traj_q: list[np.ndarray] = []
+        self.live_path, self.live_hz = live_path, live_hz
+        self._live_renderer = mujoco.Renderer(m, VIDEO_SIZE[1], VIDEO_SIZE[0]) if live_path else None
+        self._next_live_t = 0.0
+        self._log()
         self._frame()
 
     # ---------- helpers ----------
@@ -124,18 +131,57 @@ class Env:
             self.frames.append(self.renderer.render().copy())
             self._next_frame_t = self.sim_time + 1.0 / max(self.video_fps, 1e-3)
 
-    def render(self, view="front", width=320, height=240):
+    def _log(self):
+        """Trajectory sample (called every control step, ~50 Hz) + optional live frame."""
+        self._traj_t.append(self.sim_time)
+        self._traj_q.append(self.data.qpos.copy())
+        if self.live_path and self.sim_time >= self._next_live_t:
+            self._next_live_t = self.sim_time + 1.0 / max(self.live_hz, 1e-3)
+            self._write_live()
+
+    def _write_live(self):
+        from PIL import Image
+        r = self._live_renderer
+        r.update_scene(self.data, camera="front")
+        r.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = SHADOWS
+        tmp = self.live_path + ".tmp"
+        Image.fromarray(r.render()).save(tmp, format="JPEG", quality=80)
+        os.replace(tmp, self.live_path)
+
+    def trajectory(self) -> tuple[np.ndarray, np.ndarray]:
+        """(t [T], qpos [T, nq]) sampled every step()/settle() chunk."""
+        return np.array(self._traj_t), np.array(self._traj_q)
+
+    def render(self, view="front", width=320, height=240, depth=False):
+        """RGB uint8 [H, W, 3], or with depth=True the metric depth float32 [H, W] (m along the optical axis)."""
         r = mujoco.Renderer(self.model, height, width)
+        if depth:
+            r.enable_depth_rendering()
         r.update_scene(self.data, camera=view)
         r.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = SHADOWS
         img = r.render().copy()
         r.close()
-        return img
+        return img.astype(np.float32) if depth else img
+
+    def camera_info(self, view="front", width=320, height=240) -> dict:
+        """Pinhole calibration, OpenCV convention (x right, y down, z forward): pixel = K @ (R^T (p - t))."""
+        cam = self.model.camera(view)
+        f = 0.5 * height / np.tan(np.radians(float(cam.fovy[0])) / 2)
+        R_mj = self.data.cam_xmat[cam.id].reshape(3, 3)  # MuJoCo camera looks along -z with y up
+        R = R_mj @ np.diag([1.0, -1.0, -1.0])
+        T = np.eye(4); T[:3, :3], T[:3, 3] = R, self.data.cam_xpos[cam.id]
+        K = [[f, 0.0, width / 2], [0.0, f, height / 2], [0.0, 0.0, 1.0]]
+        return {"view": view, "width": width, "height": height,
+                "K": [[round(float(v), 4) for v in row] for row in K],
+                "cam_to_world": [[round(float(v), 5) for v in row] for row in T]}
 
     def close(self):
         if self.renderer is not None:
             self.renderer.close()
             self.renderer = None
+        if self._live_renderer is not None:
+            self._live_renderer.close()
+            self._live_renderer = None
 
     # ---------- stepping + metrics ----------
     def step(self, n: int = 10):
@@ -152,6 +198,7 @@ class Env:
                 now.add((min(a, b), max(a, b)))
         self.collisions += len(now - self._touching)  # count new contacts only
         self._touching = now
+        self._log()
         self._frame()
         if self.sim_time > EPISODE_LIMIT_S:
             raise TimeLimit(f"episode exceeded {EPISODE_LIMIT_S:.0f} s of sim time")
@@ -168,6 +215,7 @@ class Env:
         for _ in range(n):
             for _ in range(10):
                 mujoco.mj_step(self.model, self.data)
+            self._log()
             self._frame()
 
     def result(self) -> dict:

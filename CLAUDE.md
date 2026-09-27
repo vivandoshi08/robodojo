@@ -11,16 +11,13 @@ All code must be written during the hackathon. Use libraries freely, do not fork
 ## 1. Setup workflow (every teammate, ~1 min)
 
 ```bash
-bash setup.sh                       # venv + pinned deps + Panda assets + reference check
-# or manually:
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-bash scripts/fetch_assets.sh        # sparse-clones the Franka Panda from MuJoCo Menagerie (~36 MB, ~5 s)
-python scripts/check_reference.py   # expect: can/bottle/box/far-bin 10/10, paper ~6/10
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+uv sync                                    # pinned deps from pyproject.toml / uv.lock
+bash scripts/fetch_assets.sh               # sparse-clones the Franka Panda from MuJoCo Menagerie (~36 MB, ~5 s)
+uv run python scripts/check_reference.py   # expect: can/box/far-bin 10/10, bottle ~7/10, paper ~6/10
+echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env
 ```
 
-- Linux without a display: `export MUJOCO_GL=egl` (setup.sh does this). Mac/Windows: don't set it.
+- Linux without a display: `export MUJOCO_GL=egl`. Mac/Windows: don't set it.
 - Interactive viewer on Mac needs `mjpython` instead of `python`.
 - Do NOT add `gymnasium-robotics` or `robosuite`: both crash (AssertionError) on current MuJoCo.
 
@@ -32,15 +29,20 @@ robot_race/
   scene.py        DONE   MjSpec: Panda + tcp site + table + bin + one trash item + cameras (front/side/top)
   tasks.py        DONE   TASKS, Env (step, metrics, video frames, success check, result())
   robot.py        DONE   SimRobot: API_DOC implemented with damped-least-squares IK on the 7 arm joints
-  fake_robot.py   TODO   FakeRobot stub (same methods, canned state, logs calls)
-  executor.py     TODO   run one attempt in a subprocess -> result.json + GIF/MP4 + key frames
-  agent.py        TODO   Claude retry loop
-  viewer.py       TODO   runs/<id>/index.html gallery of attempts
+  fake_robot.py   DONE   FakeRobot stub (same methods, canned state, logs calls)
+  executor.py     DONE   run one attempt in a subprocess -> result.json + trajectory + MP4 + key frames
+  replay.py       DONE   re-render any attempt from its trajectory (HD, any camera)
+  agent.py        DONE   Claude retry loop
+  viewer.py       DONE   runs/<id>/index.html gallery + runs/index.json manifest
+  serve.py        DONE   dev HTTP server + /api/runs for the website (Range, CORS)
+  trace.py        DONE   runs/<id>/trace.html: exact model inputs/outputs -> code -> sim-timed calls -> video
+scripts/trace_demo.py                DONE  no-API-key proof run of the audit chain (scripted client -> runs_demo/)
+docs/INTEGRITY.md                    DONE  fixed environment vs. what the model controls; how to audit a run
 policies/reference_pick_and_drop.py  DONE  scripted top-down grasp -> carry -> release
 scripts/fetch_assets.sh              DONE
 scripts/check_reference.py           DONE  reference policy x 5 tasks x 10 seeds, no video (~1 min)
-run_policy.py     TODO   CLI: run a policy file on N seeds in parallel
-run_agent.py      TODO   CLI: run the agent loop
+run_policy.py     DONE   CLI: run a policy file on N seeds in parallel
+run_agent.py      DONE   CLI: run the agent loop
 ```
 
 ## 3. Contracts (don't change without the team)
@@ -61,20 +63,18 @@ run_agent.py      TODO   CLI: run the agent loop
 Steps A-D can run in parallel (different files). E is last.
 
 **A. executor.py** (parallel)
-- `run_policy(code: str, task, seed, out_dir, timeout_s=180, video_fps=None) -> dict`
-- Writes `out_dir/policy.py`, spawns `python -m robot_race.executor --task --seed --code --out [--fps]`
-  with `subprocess.run(timeout=...)`, reads `out_dir/result.json`. On timeout or crash, write a
-  result with `success=False` and the error/stderr tail.
-- Worker: `Env(task, seed, record=True, video_fps=fps)`, `SimRobot(env)`,
-  `exec(compile(code, "policy.py", "exec"), {"robot": robot, "np": np, "math": math})`, call `run(robot)`.
-  Catch `TimeLimit` and all exceptions (keep the last ~6 traceback lines). Then `env.settle(1.0)`,
-  `env.result()`, save 4 key frames (`key_0..3.png` at 0, 1/3, 2/3, end), `attempt.gif`
-  (imageio: `duration` is in **milliseconds** -> `1000/fps`), `attempt.mp4` (`fps=`), `result.json`,
-  then `env.close()`.
-- Done when: the reference policy as a code string gives `success: true` + a playable GIF.
+(As built; supersedes the original plan of in-sim GIF recording.)
+- `run_policy(code: str, task, seed, out_dir, timeout_s=180, fast=False, live=True) -> dict`
+- Writes `out_dir/policy.py`, spawns `python -m robot_race.executor --task --seed --code --out [--fast] [--no-live]`
+  with `subprocess.run(timeout=...)`, reads `out_dir/result.json`. On timeout or crash, writes a
+  result with `success=False` and the error/stderr tail. Never wipes `out_dir`.
+- Worker: `Env(task, seed, record=False, live_path=...)`, `SimRobot(env)`, exec the code, call `run(robot)`,
+  catch `TimeLimit` and all exceptions, `env.settle(1.0)`, `env.result()`, save `trajectory.npz`, then
+  render key frames, poster and (unless fast) `attempt.mp4` from the trajectory via `replay.py`. No GIF.
 
 **B. agent.py + run_agent.py** (parallel; build against FakeRobot / a canned result until A lands)
-- Model: `ANTHROPIC_MODEL` env var, else first id from `client.models.list()`.
+- Workspace: `ANTHROPIC_WORKSPACE_ID` (optional) is sent as the `anthropic-workspace-id` header; required when the API key is not scoped to a workspace.
+- Model: `ANTHROPIC_MODEL` env var, else `claude-sonnet-5` (pinned so races compare strategies, not models).
 - System prompt: short role line + `API_DOC` + output rules (one ```python block defining
   `run(robot)`, only `robot`/`np`/`math`, no imports of other modules, no I/O).
 - First user turn: task text (`TASKS[task]["text"]`) + `get_state()` JSON + front and top images
@@ -85,12 +85,12 @@ Steps A-D can run in parallel (different files). E is last.
 - Save `response.md` per attempt and `runs/<run_id>/summary.json` (task, seed, model, strategy,
   per-attempt results + code, solved_at).
 - CLI flags: `--task --seed --tries 5 --strategy "<text>" --example --context-file <path> --fast`
-  (`--example` adds the reference policy to the prompt: Gate 3 fallback;
-  `--fast` = `video_fps=0.5`, key frames only).
+  (`--example` adds the reference policy to the prompt: opt-in, off by default, recorded as a hint and
+  bannered on every page, see docs/INTEGRITY.md; `--fast` = no mp4: key frames, poster and trajectory only).
 - Done when: `python run_agent.py --task can_to_bin --seed 0` succeeds within 5 tries.
 
 **C. viewer.py** (parallel)
-- `write_index(run_dir)`: scan subdirs with `result.json`; one card each: GIF, success badge, time,
+- `write_index(run_dir)`: scan subdirs with `result.json`; one card each: mp4 video, success badge, time,
   collisions, energy, error, code in `<details>`. Plain HTML + inline CSS. Call it at the end of
   run_policy.py and run_agent.py.
 
@@ -100,9 +100,10 @@ Steps A-D can run in parallel (different files). E is last.
 - FakeRobot: same methods as SimRobot, returns canned state (copy one real `get_state()`), zeros image.
 
 **E. Integration** (sequential, after A-D)
-1. Gate 2: `run_policy.py` on the reference policy, 5 seeds, GIFs look right.
-2. Gate 3: `run_agent.py --task can_to_bin` on seeds 0-2. If it fails, tighten the prompt
-   (not the API) or use `--example`.
+1. Gate 2: `run_policy.py` on the reference policy, 5 seeds, videos look right. (PASSED: 5/5)
+2. Gate 3: `run_agent.py --task can_to_bin` on seeds 0-2. If it fails, the prompt may only gain
+   environment FACTS (frame, units, what a call does); never solution advice (heights, grasp tips,
+   call sequences). `--example` exists but makes the run a hinted run (docs/INTEGRITY.md).
 3. Then try `bottle_to_bin`, `box_to_bin` (needs yaw), `paper_to_bin` (hard: bounces).
 
 ## 5. Performance facts (measured on a 2-CPU cloud box, no GPU)
@@ -110,7 +111,7 @@ Steps A-D can run in parallel (different files). E is last.
 - Physics + IK: ~20x real time (a 12 s episode runs in ~0.5 s without video).
 - Rendering is the bottleneck on CPU: ~80 ms/frame with shadows off (default), ~290 ms with shadows.
   Env vars: `RR_VIDEO_FPS` (default 12), `RR_SHADOWS=1` for demo-quality video on a laptop GPU.
-- For races, record key frames only (`video_fps=0.5`) and re-render the winner with full video.
+- For races, use `--fast` (no mp4) and re-render the winner with `python -m robot_race.replay`.
 
 ## 6. Tuning knobs if grasps fail
 
@@ -139,11 +140,34 @@ runs/
   <run_id>/                       run_id = "<YYYYmmdd-HHMMSS>-<task>-s<seed>[-<slug>]"
     summary.json                  task, seed, model, strategy, status, solved_at, attempts[...]
     events.jsonl                  append-only live feed, one JSON object per line
-    index.html                    local gallery (viewer.write_index)
+    index.html                    local gallery (viewer.write_index; links trace.html when present)
+    trace.html                    audit trace, self-contained, relative paths (trace.write_trace; agent runs)
+    transcript.jsonl              one line per model call (agent runs), see below
+    observation/                  what the model was shown first (agent runs)
+      front.png, top.png          exact PNG bytes put in the first request
+      state.json                  the get_state() dict in the first request
+    transcript/turn_<n>/          one dir per model call, n starts at 1 (== attempt k in the current loop)
+      request.json                messages.create kwargs verbatim (model, max_tokens, system, messages);
+                                  each base64 image block -> {"type":"image","file":"img_<i>.png","sha256",
+                                  "media_type","bytes"} (other keys, e.g. cache_control, kept)
+      img_<i>.png                 decoded bytes of image block i (order of appearance in the request)
+      response.json               raw API response (id, model, stop_reason, usage, content[...])
+      meta.json                   turn, attempt, started, finished (unix), latency_s, retries, retry_errors
+                                  [, model, stop_reason | error]
     attempt_<k>/                  k starts at 1
       policy.py                   code that ran
       response.md                 raw model reply (agent runs only)
       result.json                 RESULT_KEYS + item_final_pos, calls, wall_s, media{...}
+      calls.json                  {time_unit, calls: [{i, call, args, t_start, t_end, tcp_before, tcp_after,
+                                  gripper_width_after, holding_after[, error]}], exception: {type, message,
+                                  sim_time, in_call, traceback} | null, policy_t_end, episode_t_end}
+                                  (times = sim s since episode start == attempt.mp4 time; includes
+                                  get_state/get_image calls, which result.json["calls"] strings omit)
+      provenance.json             policy_sha256 (bytes of policy.py as executed), response_code_sha256,
+                                  code_matches_response (bool | null if no reply sha given), refused (true =
+                                  sha mismatch, nothing ran), task, seed, completed, mujoco/python/numpy_version, sim_timestep, control_dt,
+                                  episode_limit_s, trajectory_samples, trajectory_t_range, keyframe_times,
+                                  video {file, fps, n_frames, frame_time} | null, wall_started/finished/s, error
       trajectory.npz              t [T], qpos [T, nq] at 50 Hz: re-render any camera/res later
       live.jpg                    latest frame while the attempt runs (~2 Hz, overwritten)
       poster.jpg                  final frame, 640x480
@@ -151,15 +175,41 @@ runs/
       attempt.mp4                 H.264, yuv420p, +faststart, 640x480 @ 30 fps (browser-playable)
 ```
 
-- `result.json["media"]` = relative paths: `{"video", "poster", "keyframes": [...], "trajectory", "live"}`
-  (missing entries = null). `frames`/`video` keys keep pointing at key frames / attempt.mp4.
-- `events.jsonl` types: `run_started`, `attempt_started`, `code_generated`, `attempt_finished`,
+- `result.json["media"]` = relative paths: `{"video", "poster", "keyframes": [...], "trajectory", "live",
+  "calls_json", "provenance"}` (missing entries = null). `frames`/`video`/`code_path` are also relative to the
+  attempt dir (never absolute: this JSON is public). Tracebacks/stderr in `error` are scrubbed of local paths.
+- **Video time == sim time**: frame i of attempt.mp4 shows the trajectory sample nearest sim t = i/30
+  (last frame = episode end). To show sim time t, seek to `(round(t*30)+0.5)/30` (trace.html does this).
+- `transcript.jsonl` line: `{turn, attempt, dir, request, response (null on API failure), meta, images [all
+  img paths, relative to the run dir], image_sha256 [...], new_images [images in the newest user message],
+  latency_s, retries, ts, usage, stop_reason, error}`. Turn n+1's newest user message = the feedback on attempt n.
+- `summary.json` (agent runs) adds `transcript: "transcript.jsonl"`, `trace: "trace.html"`,
+  `observation: {front, top, state}` and per attempt `code_sha256`, `transcript_turn`.
+- **Integrity flags** (`summary.json`, agent runs): `hints: {"example": bool, "strategy": str|null,
+  "context": bool}` = everything beyond the environment that reached the model (all off by default);
+  `hinted` = any of them; `scripted` = true when the caller injected a client that is not
+  `anthropic.Anthropic` (a scripted/fake model), false when the loop created the real client. The legacy
+  top-level `example`, `strategy`, `context` fields stay. `run_started` events carry `hints` + `scripted`.
+  trace.html, `<run_id>/index.html` and the home cards show a banner: "Hint given: reference example in
+  prompt" (etc.), "SCRIPTED DEMO, NOT A MODEL", or "HAND-WRITTEN POLICY, NOT A MODEL" (run_policy runs).
+- **Provenance guard**: the agent always passes `response_code_sha256` (sha256 of the extracted code block);
+  if sha256(policy.py) differs, the executor does not run it: `result.json["error"]` starts with
+  "code does not match model reply", `provenance.json["refused"] = true`, no trajectory/calls/media.
+- `events.jsonl` types: `run_started`, `attempt_started`, `model_request` (turn, n_images, n_new_images,
+  n_messages, model), `model_response` (turn, latency_s, retries, n_images, usage, stop_reason, error),
+  `code_generated` (+ `code_sha256`), `attempt_finished`,
   `run_finished`. Every event has `ts` (unix float), `type`, `run_id`, `attempt` (null for run-level).
   `attempt_finished` embeds the result dict; `run_finished` has `status` ("solved"|"failed"|"error"), `solved_at`.
 - `summary.json["status"]`: `running` | `solved` | `failed` | `error`.
 - `runs/index.json`: `[{run_id, task, seed, model, strategy, status, solved_at, n_attempts, created_at,
-  poster, video}]` (poster/video = best attempt, relative to `runs/`).
+  kind ("agent"|"policy"), hints (null for policy runs), hinted, scripted, n_success, seeds, best_attempt,
+  poster, video}]` (poster/video = best attempt, relative to `runs/`). A public "model did it" claim needs
+  `kind == "agent" and not scripted and not hinted`.
 - HD re-render for the demo: `python -m robot_race.replay runs/<id>/attempt_<k> --width 1920 --height 1080
   --fps 60 --shadows --camera front` -> `attempt_hd.mp4`. On a Mac GPU this renders faster than real time
   (measured: 960x720 + shadows = 81 fps).
 - `--fast` (races): trajectory + key frames + poster only, no mp4; re-render the winner later with replay.
+- API: `GET /api/runs/<run_id>/transcript` -> `{"turns": [transcript.jsonl lines]}` (serve.py).
+- Proof run without an API key: `python scripts/trace_demo.py [--runs-dir runs_demo]` (real loop + executor +
+  sim, scripted client whose 2nd reply is the reference policy; writes to gitignored `runs_demo/`, never the
+  public `runs/`, with `scripted: true`; checks every link of the chain and prints the run dir).
