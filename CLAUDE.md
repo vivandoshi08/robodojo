@@ -38,6 +38,8 @@ robot_race/
   agent.py        DONE   Claude retry loop
   viewer.py       DONE   runs/<id>/index.html gallery + runs/index.json manifest
   serve.py        DONE   dev HTTP server + /api/runs for the website (Range, CORS)
+  trace.py        DONE   runs/<id>/trace.html: exact model inputs/outputs -> code -> sim-timed calls -> video
+scripts/trace_demo.py                DONE  no-API-key proof run of the audit chain (scripted client)
 policies/reference_pick_and_drop.py  DONE  scripted top-down grasp -> carry -> release
 scripts/fetch_assets.sh              DONE
 scripts/check_reference.py           DONE  reference policy x 5 tasks x 10 seeds, no video (~1 min)
@@ -141,11 +143,34 @@ runs/
   <run_id>/                       run_id = "<YYYYmmdd-HHMMSS>-<task>-s<seed>[-<slug>]"
     summary.json                  task, seed, model, strategy, status, solved_at, attempts[...]
     events.jsonl                  append-only live feed, one JSON object per line
-    index.html                    local gallery (viewer.write_index)
+    index.html                    local gallery (viewer.write_index; links trace.html when present)
+    trace.html                    audit trace, self-contained, relative paths (trace.write_trace; agent runs)
+    transcript.jsonl              one line per model call (agent runs), see below
+    observation/                  what the model was shown first (agent runs)
+      front.png, top.png          exact PNG bytes put in the first request
+      state.json                  the get_state() dict in the first request
+    transcript/turn_<n>/          one dir per model call, n starts at 1 (== attempt k in the current loop)
+      request.json                messages.create kwargs verbatim (model, max_tokens, system, messages);
+                                  each base64 image block -> {"type":"image","file":"img_<i>.png","sha256",
+                                  "media_type","bytes"} (other keys, e.g. cache_control, kept)
+      img_<i>.png                 decoded bytes of image block i (order of appearance in the request)
+      response.json               raw API response (id, model, stop_reason, usage, content[...])
+      meta.json                   turn, attempt, started, finished (unix), latency_s, retries, retry_errors
+                                  [, model, stop_reason | error]
     attempt_<k>/                  k starts at 1
       policy.py                   code that ran
       response.md                 raw model reply (agent runs only)
       result.json                 RESULT_KEYS + item_final_pos, calls, wall_s, media{...}
+      calls.json                  {time_unit, calls: [{i, call, args, t_start, t_end, tcp_before, tcp_after,
+                                  gripper_width_after, holding_after[, error]}], exception: {type, message,
+                                  sim_time, in_call, traceback} | null, policy_t_end, episode_t_end}
+                                  (times = sim s since episode start == attempt.mp4 time; includes
+                                  get_state/get_image calls, which result.json["calls"] strings omit)
+      provenance.json             policy_sha256 (bytes of policy.py as executed), response_code_sha256,
+                                  code_matches_response (bool | null if no reply sha given), task, seed,
+                                  completed, mujoco/python/numpy_version, sim_timestep, control_dt,
+                                  episode_limit_s, trajectory_samples, trajectory_t_range, keyframe_times,
+                                  video {file, fps, n_frames, frame_time} | null, wall_started/finished/s, error
       trajectory.npz              t [T], qpos [T, nq] at 50 Hz: re-render any camera/res later
       live.jpg                    latest frame while the attempt runs (~2 Hz, overwritten)
       poster.jpg                  final frame, 640x480
@@ -153,9 +178,19 @@ runs/
       attempt.mp4                 H.264, yuv420p, +faststart, 640x480 @ 30 fps (browser-playable)
 ```
 
-- `result.json["media"]` = relative paths: `{"video", "poster", "keyframes": [...], "trajectory", "live"}`
-  (missing entries = null). `frames`/`video`/`code_path` are also relative to the attempt dir (never absolute: this JSON is public).
-- `events.jsonl` types: `run_started`, `attempt_started`, `code_generated`, `attempt_finished`,
+- `result.json["media"]` = relative paths: `{"video", "poster", "keyframes": [...], "trajectory", "live",
+  "calls_json", "provenance"}` (missing entries = null). `frames`/`video`/`code_path` are also relative to the
+  attempt dir (never absolute: this JSON is public). Tracebacks/stderr in `error` are scrubbed of local paths.
+- **Video time == sim time**: frame i of attempt.mp4 shows the trajectory sample nearest sim t = i/30
+  (last frame = episode end). To show sim time t, seek to `(round(t*30)+0.5)/30` (trace.html does this).
+- `transcript.jsonl` line: `{turn, attempt, dir, request, response (null on API failure), meta, images [all
+  img paths, relative to the run dir], image_sha256 [...], new_images [images in the newest user message],
+  latency_s, retries, ts, usage, stop_reason, error}`. Turn n+1's newest user message = the feedback on attempt n.
+- `summary.json` (agent runs) adds `transcript: "transcript.jsonl"`, `trace: "trace.html"`,
+  `observation: {front, top, state}` and per attempt `code_sha256`, `transcript_turn`.
+- `events.jsonl` types: `run_started`, `attempt_started`, `model_request` (turn, n_images, n_new_images,
+  n_messages, model), `model_response` (turn, latency_s, retries, n_images, usage, stop_reason, error),
+  `code_generated` (+ `code_sha256`), `attempt_finished`,
   `run_finished`. Every event has `ts` (unix float), `type`, `run_id`, `attempt` (null for run-level).
   `attempt_finished` embeds the result dict; `run_finished` has `status` ("solved"|"failed"|"error"), `solved_at`.
 - `summary.json["status"]`: `running` | `solved` | `failed` | `error`.
@@ -165,3 +200,6 @@ runs/
   --fps 60 --shadows --camera front` -> `attempt_hd.mp4`. On a Mac GPU this renders faster than real time
   (measured: 960x720 + shadows = 81 fps).
 - `--fast` (races): trajectory + key frames + poster only, no mp4; re-render the winner later with replay.
+- API: `GET /api/runs/<run_id>/transcript` -> `{"turns": [transcript.jsonl lines]}` (serve.py).
+- Proof run without an API key: `python scripts/trace_demo.py` (real loop + executor + sim, scripted
+  client; checks every link of the chain and prints the run dir).
