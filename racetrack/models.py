@@ -70,7 +70,8 @@ class Attempt(BaseModel):
 class ScoringConfig(BaseModel):
     """Per agent, over its seeds (a seed ends when solved or after max_attempts tries):
 
-    score = w_success * solve_rate
+    score = squashed into (0, 100] (>= 10 kept, below decays toward 0; scoring._squash) of:
+            w_success * solve_rate
           + w_extra_attempt * mean(tries used - 1)
           + w_time_s * mean time_s of the winning tries
           + w_collisions * collisions per seed (final try)

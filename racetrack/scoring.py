@@ -6,6 +6,8 @@ itself (time, energy) come from the winning tries only.
 """
 from __future__ import annotations
 
+import math
+
 from collections import Counter, defaultdict
 from typing import Any, Iterable, Optional
 
@@ -84,7 +86,7 @@ def aggregate(agent_id: str, attempts: list[Attempt], cfg: ScoringConfig,
         solve_rate=_r(solve_rate, 4), first_try_rate=_r(first_try_rate, 4),
         mean_tries_to_solve=_r(mean_tries, 2), attempts_total=sum(len(u) for _, u, _ in outcomes),
         mean_time_s=_r(mean_time), collisions_per_seed=_r(collisions), mean_energy=_r(mean_energy),
-        score=_r(sum(breakdown.values()), 2), score_breakdown=breakdown,
+        score=_r(_squash(sum(breakdown.values())), 2), score_breakdown=breakdown,
         failure_modes=dict(modes), top_failure=modes.most_common(1)[0][0] if modes else None,
         top_error=errors.most_common(1)[0][0] if errors else None,
         best_attempt=BestAttempt(seed=best.seed, attempt=best.attempt, time_s=best.time_s,
@@ -92,6 +94,12 @@ def aggregate(agent_id: str, attempts: list[Attempt], cfg: ScoringConfig,
         skill_eligible=complete and solve_rate >= cfg.min_solve_rate_for_skill,
         seeds=[o for o, _, _ in outcomes],
     )
+
+
+def _squash(raw: float) -> float:
+    """Raw weighted sum -> (0, 100]: >= 10 kept (capped at 100); below 10 decays smoothly toward 0,
+    never reaching it, so order is preserved (-20 -> 3.7, -50 -> 1.4)."""
+    return min(100.0, raw) if raw >= 10 else 10.0 * math.exp((raw - 10.0) / 30.0)
 
 
 def _sort_key(s: AgentScore):
