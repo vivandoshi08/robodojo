@@ -16,6 +16,13 @@ API:     GET /api/runs                              -> manifest (same as runs/in
                                                     -> local: spawns run_race.py detached; qm: calls
                                                        qm.launch.launch_qm_race(...) in a thread (503 if
                                                        qm/launch.py is missing); {"launch_id", "backend", ...}
+         POST /api/plan {task, agents, seed, memory, custom: [{name, approach}]}
+                                                    -> {plan_id, state}: `python -m racetrack.planner preview`
+                                                       in a subprocess (custom strategies go in as a file);
+                                                       plan -> races/_plans/<plan_id>.json
+         GET  /api/plan/<plan_id>                   -> {state: pending|done|failed, plan, error}
+         POST /api/race also takes plan_id (+ strategies: [{agent_id, name?, approach?}] = the cards kept, in
+                                                       order; only custom cards may be edited) or custom
          GET /api/launch/<launch_id>                -> {running, exit_code, race_id (once planned), log_tail}
          GET /api/races                             -> tracker races (fail-soft) merged with local races/<id>/
          GET /api/races/<race_id>                   -> composite: plan, race, close, context, memory (races/<id>/
@@ -60,6 +67,9 @@ MAX_JOBS = 12          # agents x seeds per launch: every one is a paid agent lo
 RACE_FILES = {"plan": "plan.json", "race": "race.json", "close": "close.json", "memory": "memory.json",
               "launch": "launch.json"}
 RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+MAX_CUSTOM = 6
+MAX_APPROACH = 1000
+MAX_NAME = 60
 MIME = {".mp4": "video/mp4", ".jsonl": "application/x-ndjson", ".npz": "application/octet-stream",
         ".json": "application/json", ".md": "text/markdown; charset=utf-8", ".py": "text/plain; charset=utf-8",
         ".jpg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".html": "text/html; charset=utf-8"}
@@ -203,7 +213,7 @@ def validate_race(body) -> dict:
         return v
 
     agents = bounded("agents", 4, 1, 6)
-    tries = bounded("tries", 5, 1, 5)
+    tries = bounded("tries", 3, 1, 5)
     seeds = str(body.get("seeds", "0")).replace(" ", "")
     if not SEEDS.match(seeds):
         raise ValueError("seeds must look like 0, 0-2 or 0,3,5")
@@ -219,8 +229,120 @@ def validate_race(body) -> dict:
     backend = body.get("backend", "local")
     if backend not in ("local", "qm"):
         raise ValueError("backend must be 'local' or 'qm'")
-    return {"task": task, "agents": agents, "seeds": seeds, "tries": tries, "label": label, "memory": memory,
-            "backend": backend}
+    out = {"task": task, "agents": agents, "seeds": seeds, "tries": tries, "label": label, "memory": memory,
+           "backend": backend}
+    plan_id = body.get("plan_id")
+    if plan_id is not None:
+        if not isinstance(plan_id, str) or not RUN_ID.match(plan_id):
+            raise ValueError("plan_id is not valid")
+        out["plan_id"] = plan_id
+        out["strategies"] = validate_kept(body.get("strategies"))
+        if out["strategies"] is not None:
+            if not out["strategies"]:
+                raise ValueError("keep at least one strategy")
+            out["agents"] = len(out["strategies"])
+            if out["agents"] * n_seeds > MAX_JOBS:
+                raise ValueError(f"agents x seeds = {out['agents'] * n_seeds} > {MAX_JOBS}")
+    elif body.get("custom"):
+        out["custom"] = validate_custom(body.get("custom"))
+        if len(out["custom"]) > agents:
+            raise ValueError(f"{len(out['custom'])} custom strategies but only {agents} racers")
+    return out
+
+
+def _clean_text(v, what: str, limit: int, required: bool = True) -> str:
+    if v is None and not required:
+        return ""
+    if not isinstance(v, str):
+        raise ValueError(f"{what} must be text")
+    v = " ".join(v.replace("\x00", "").split()) if what.endswith("name") else v.replace("\x00", "").strip()
+    if required and not v:
+        raise ValueError(f"{what} is empty")
+    if len(v) > limit:
+        raise ValueError(f"{what} is longer than {limit} characters")
+    return v
+
+
+def validate_custom(items) -> list[dict]:
+    """User strategies -> [{name, approach}]. Written to a JSON file for the planner, never put on a command line."""
+    if not isinstance(items, list) or len(items) > MAX_CUSTOM:
+        raise ValueError(f"custom must be a list of at most {MAX_CUSTOM} strategies")
+    out = []
+    for i, c in enumerate(items):
+        if not isinstance(c, dict):
+            raise ValueError("each custom strategy is {name, approach}")
+        name = _clean_text(c.get("name") or f"Custom {i + 1}", "custom strategy name", MAX_NAME)
+        out.append({"name": name, "approach": _clean_text(c.get("approach"), f"approach of {name!r}", MAX_APPROACH)})
+    return out
+
+
+def validate_kept(items) -> list[dict] | None:
+    """The strategy cards the user kept (in order); name/approach edits only apply to custom cards."""
+    if items is None:
+        return None
+    if not isinstance(items, list) or len(items) > 6:
+        raise ValueError("strategies must be a list of at most 6 cards")
+    out, seen = [], set()
+    for c in items:
+        if not isinstance(c, dict) or not isinstance(c.get("agent_id"), str) or not RUN_ID.match(c["agent_id"]):
+            raise ValueError("each kept strategy needs its agent_id")
+        if c["agent_id"] in seen:
+            raise ValueError(f"{c['agent_id']} kept twice")
+        seen.add(c["agent_id"])
+        k = {"agent_id": c["agent_id"]}
+        if c.get("name") is not None:
+            k["name"] = _clean_text(c["name"], "strategy name", MAX_NAME)
+        if c.get("approach") is not None:
+            k["approach"] = _clean_text(c["approach"], "approach", MAX_APPROACH)
+        out.append(k)
+    return out
+
+
+def validate_plan_request(body) -> dict:
+    """POST /api/plan body -> {task, agents, seed, memory, custom}."""
+    if not isinstance(body, dict):
+        raise ValueError("body must be a JSON object")
+    task = body.get("task", "can_to_bin")
+    if not isinstance(task, str) or task not in task_ids():
+        raise ValueError(f"unknown task {task!r}")
+    agents, seed = body.get("agents", 4), body.get("seed", 0)
+    if isinstance(agents, bool) or not isinstance(agents, int) or not 1 <= agents <= 6:
+        raise ValueError("agents must be an integer in [1, 6]")
+    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= 999:
+        raise ValueError("seed must be an integer in [0, 999]")
+    memory = body.get("memory", "tracker")
+    if memory not in ("tracker", "none"):
+        raise ValueError("memory must be 'tracker' or 'none'")
+    custom = validate_custom(body.get("custom") or [])
+    if len(custom) > agents:
+        raise ValueError(f"{len(custom)} custom strategies but only {agents} racers")
+    return {"task": task, "agents": agents, "seed": seed, "memory": memory, "custom": custom}
+
+
+def final_plan(plan: dict, kept: list[dict] | None) -> dict:
+    """The previewed plan narrowed to the kept cards (their order), with custom-card edits applied.
+    Agent ids are renumbered agent-1.. so every downstream id stays dense."""
+    if kept is None:
+        return plan
+    by = {s.get("agent_id"): s for s in plan.get("strategies") or []}
+    out = []
+    for i, k in enumerate(kept):
+        if k["agent_id"] not in by:
+            raise ValueError(f"{k['agent_id']} is not in this plan")
+        s = dict(by[k["agent_id"]])
+        if s.get("mode") == "custom":
+            s.update({f: k[f] for f in ("name", "approach") if f in k})
+        elif any(f in k and k[f] != s.get(f) for f in ("name", "approach")):
+            raise ValueError(f"only your own (custom) strategies can be edited, not {s.get('name')!r}")
+        s["planned_as"] = s.get("agent_id")
+        s["agent_id"] = f"agent-{i + 1}"
+        out.append(s)
+    return {**plan, "strategies": out, "edited": True}
+
+
+def public_params(p: dict) -> dict:
+    """Launch params as echoed back / logged: no full plan, no local file paths."""
+    return {k: v for k, v in p.items() if k not in ("plan", "plan_path", "custom_path")}
 
 
 class Unavailable(RuntimeError):
@@ -253,6 +375,10 @@ def race_cmd(p: dict, runs_root: str, races_root: str) -> list[str]:
            "--runs-dir", runs_root, "--races-dir", races_root]
     if p["label"]:
         cmd += ["--label", p["label"]]
+    if p.get("plan_path"):
+        cmd += ["--plan", p["plan_path"]]
+    elif p.get("custom_path"):
+        cmd += ["--custom-file", p["custom_path"]]
     return cmd
 
 
@@ -337,6 +463,63 @@ def memory_episodes(task: str | None, limit: int) -> dict:
     return {"root": str(root), "episodes": eps[-limit:][::-1]}
 
 
+class Planner:
+    """Plan previews for the strategy board: `python -m racetrack.planner preview` in a subprocess.
+    Custom strategies reach it as a JSON file. One preview at a time (each one is a paid planner call
+    unless every racer is custom)."""
+
+    def __init__(self, races_root: str):
+        self.dir = os.path.join(races_root, "_plans")
+        self.jobs: dict[str, subprocess.Popen] = {}
+        self.lock = threading.Lock()
+
+    def start(self, req: dict) -> dict:
+        with self.lock:
+            busy = [k for k, p in self.jobs.items() if p.poll() is None]
+            if busy:
+                raise RuntimeError(f"a plan is already being drafted ({busy[0]})")
+            os.makedirs(self.dir, exist_ok=True)
+            plan_id = "plan-" + time.strftime("%Y%m%d-%H%M%S")
+            while os.path.exists(os.path.join(self.dir, plan_id + ".req.json")):
+                plan_id += "x"
+            base = os.path.join(self.dir, plan_id)
+            with open(base + ".req.json", "w") as f:
+                json.dump(req, f, indent=2)
+            cmd = [sys.executable, "-m", "racetrack.planner", "preview", "--task", req["task"],
+                   "--agents", str(req["agents"]), "--seed", str(req["seed"]), "--memory", req["memory"],
+                   "--out", base + ".json"]
+            if req["custom"]:
+                with open(base + ".custom.json", "w") as f:
+                    json.dump(req["custom"], f, indent=2)
+                cmd += ["--custom-file", base + ".custom.json"]
+            with open(base + ".log", "w") as log:
+                self.jobs[plan_id] = subprocess.Popen(cmd, cwd=REPO, stdout=subprocess.DEVNULL, stderr=log,
+                                                      stdin=subprocess.DEVNULL, start_new_session=True,
+                                                      env={**os.environ, "PYTHONUNBUFFERED": "1"})
+        return {"plan_id": plan_id, "state": "pending", "llm": len(req["custom"]) < req["agents"]}
+
+    def status(self, plan_id: str) -> dict | None:
+        base = os.path.join(self.dir, plan_id)
+        if not os.path.exists(base + ".req.json"):
+            return None
+        req = _read_json(base + ".req.json")
+        p = self.jobs.get(plan_id)
+        rc = p.poll() if p else 0
+        plan = _read_json(base + ".json")
+        if rc is None:
+            return {"plan_id": plan_id, "state": "pending", "request": req}
+        if isinstance(plan, dict) and plan.get("strategies"):
+            return {"plan_id": plan_id, "state": "done", "request": req, "plan": plan}
+        tail = ""
+        try:
+            with open(base + ".log") as f:
+                tail = "\n".join(f.read().strip().splitlines()[-4:])
+        except OSError:
+            pass
+        return {"plan_id": plan_id, "state": "failed", "request": req,
+                "error": (tail or f"planner exited {rc}")[-600:]}
+
+
 class Launcher:
     """run_race.py processes started from the UI. One at a time: each launch spends API credit."""
 
@@ -361,17 +544,39 @@ class Launcher:
                    or os.path.exists(os.path.join(self.log_dir, launch_id + ".log"))):
                 launch_id += "x"
             log_path = os.path.join(self.log_dir, launch_id + ".log")
+            params = self._materialize(launch_id, params)
             if params.get("backend") == "qm":
                 return self._start_qm(launch_id, log_path, params)
             with open(log_path, "w") as log:
-                log.write(json.dumps({"launch": launch_id, "params": params}) + "\n")
+                log.write(json.dumps({"launch": launch_id, "params": public_params(params)}) + "\n")
                 log.flush()
                 self.procs[launch_id] = subprocess.Popen(
                     race_cmd(params, self.runs_root, self.races_root), cwd=REPO, stdout=log,
                     stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
                     env={**os.environ, "PYTHONUNBUFFERED": "1"})
             return {"launch_id": launch_id, "backend": "local", "log": os.path.relpath(log_path, REPO),
-                    "params": params}
+                    "params": public_params(params)}
+
+    def _materialize(self, launch_id: str, params: dict) -> dict:
+        """plan_id -> races/_plans/<id>.final.json (kept cards); custom -> races/_launch/<id>.custom.json."""
+        params = dict(params)
+        if params.get("plan_id"):
+            src = os.path.join(self.races_root, "_plans", params["plan_id"] + ".json")
+            plan = _read_json(src)
+            if not isinstance(plan, dict) or not plan.get("strategies"):
+                raise ValueError(f"plan {params['plan_id']} not found or not ready")
+            plan = final_plan(plan, params.get("strategies"))
+            params["agents"] = len(plan["strategies"])
+            path = os.path.join(self.races_root, "_plans", f"{params['plan_id']}.{launch_id}.final.json")
+            with open(path, "w") as f:
+                json.dump(plan, f, indent=2)
+            params["plan_path"], params["plan"] = path, plan
+        elif params.get("custom"):
+            path = os.path.join(self.log_dir, launch_id + ".custom.json")
+            with open(path, "w") as f:
+                json.dump(params["custom"], f, indent=2)
+            params["custom_path"] = path
+        return params
 
     def _start_qm(self, launch_id: str, log_path: str, params: dict) -> dict:
         launch = getattr(qm_module(), "launch_qm_race", None)  # Unavailable -> 503
@@ -381,8 +586,13 @@ class Launcher:
 
         def run():
             try:
+                kw = {}
+                if params.get("plan"):
+                    kw["plan"] = params["plan"]
+                elif params.get("custom"):
+                    kw["custom"] = params["custom"]
                 state["result"] = launch(params["task"], params["agents"], expand_seeds(params["seeds"]),
-                                         params["tries"], params["label"] or "qm")
+                                         params["tries"], params["label"] or "qm", **kw)
                 line = {"result": state["result"]}
             except Exception as e:  # noqa: BLE001
                 state["error"] = f"{type(e).__name__}: {e}"
@@ -391,11 +601,12 @@ class Launcher:
                 f.write(json.dumps(line, default=str) + "\n")
 
         with open(log_path, "w") as f:
-            f.write(json.dumps({"launch": launch_id, "params": params}) + "\n")
+            f.write(json.dumps({"launch": launch_id, "params": public_params(params)}) + "\n")
         state["thread"] = threading.Thread(target=run, name=f"qm-launch-{launch_id}", daemon=True)
         self.qm[launch_id] = state
         state["thread"].start()
-        return {"launch_id": launch_id, "backend": "qm", "log": os.path.relpath(log_path, REPO), "params": params}
+        return {"launch_id": launch_id, "backend": "qm", "log": os.path.relpath(log_path, REPO),
+                "params": public_params(params)}
 
     def status(self, launch_id: str) -> dict | None:
         log_path = os.path.join(self.log_dir, launch_id + ".log")
@@ -423,12 +634,14 @@ class Handler(SimpleHTTPRequestHandler):
     server_version = "RobotRace/1"
 
     def __init__(self, *args, runs_root: str, ui_root: str | None = None, races_root: str | None = None,
-                 launcher: Launcher | None = None, renderer: Renderer | None = None, **kw):
+                 launcher: Launcher | None = None, renderer: Renderer | None = None,
+                 planner: Planner | None = None, **kw):
         self.runs_root = os.path.realpath(runs_root)
         self.ui_root = os.path.realpath(ui_root or os.path.join(REPO, "ui"))
         self.races_root = os.path.realpath(races_root or os.path.join(REPO, "races"))
         self.launcher = launcher
         self.renderer = renderer
+        self.planner = planner
         super().__init__(*args, directory=self.runs_root, **kw)
 
     def log_request(self, code="-", size="-"):  # quiet: the UI polls a lot; log errors only
@@ -485,23 +698,39 @@ class Handler(SimpleHTTPRequestHandler):
             except RuntimeError as e:
                 return self._error(HTTPStatus.TOO_MANY_REQUESTS, str(e))
             return self._json(st, HTTPStatus.ACCEPTED if st["state"] == "pending" else HTTPStatus.OK)
+        if path == "/api/plan":
+            if self.planner is None:
+                return self._error(HTTPStatus.SERVICE_UNAVAILABLE, "planning is disabled on this server")
+            try:
+                req = validate_plan_request(self._body())
+            except (ValueError, TypeError) as e:
+                return self._error(HTTPStatus.BAD_REQUEST, str(e))
+            try:
+                return self._json(self.planner.start(req), HTTPStatus.ACCEPTED)
+            except RuntimeError as e:
+                return self._error(HTTPStatus.CONFLICT, str(e))
         if path != "/api/race":
             return self._error(HTTPStatus.NOT_FOUND, "not found")
         if self.launcher is None:
             return self._error(HTTPStatus.SERVICE_UNAVAILABLE, "launching is disabled on this server")
         try:
-            n = int(self.headers.get("Content-Length") or 0)
-            if n > 4096:
-                raise ValueError("body too large")
-            params = validate_race(json.loads(self.rfile.read(n) or b"{}"))
+            params = validate_race(self._body())
         except (ValueError, TypeError) as e:  # json.JSONDecodeError is a ValueError
             return self._error(HTTPStatus.BAD_REQUEST, str(e))
         try:
             return self._json(self.launcher.start(params), HTTPStatus.ACCEPTED)
         except Unavailable as e:
             return self._error(HTTPStatus.SERVICE_UNAVAILABLE, str(e))
+        except ValueError as e:
+            return self._error(HTTPStatus.BAD_REQUEST, str(e))
         except RuntimeError as e:
             return self._error(HTTPStatus.CONFLICT, str(e))
+
+    def _body(self, limit: int = 16384):
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > limit:
+            raise ValueError("body too large")
+        return json.loads(self.rfile.read(n) or b"{}")
 
     def _handle(self, head: bool):
         u = urlsplit(self.path)
@@ -513,6 +742,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._api(raw, q, head)
         if raw == "/api/races" or raw.startswith("/api/races/"):
             return self._races(raw, u.query, head)
+        if raw.startswith("/api/plan/"):
+            pid = raw[len("/api/plan/"):]
+            st = self.planner.status(pid) if self.planner and RUN_ID.match(pid) else None
+            return self._json(st, head=head) if st else self._error(HTTPStatus.NOT_FOUND, "no such plan", head)
         if raw.startswith("/api/launch/"):
             lid = raw[len("/api/launch/"):]
             st = self.launcher.status(lid) if self.launcher and RUN_ID.match(lid) else None
@@ -762,8 +995,10 @@ def make_server(runs_root: str = "runs", host: str = "127.0.0.1", port: int = 80
     races_root = os.path.abspath(races_root or os.path.join(REPO, "races"))
     launcher = Launcher(os.path.abspath(runs_root), races_root) if launch else None
     renderer = Renderer() if launch else None  # --no-launch = read-only viewer: no subprocesses at all
+    planner = Planner(races_root) if launch else None
     srv = ThreadingHTTPServer((host, port), partial(Handler, runs_root=runs_root, ui_root=ui_root,
-                                                    races_root=races_root, launcher=launcher, renderer=renderer))
+                                                    races_root=races_root, launcher=launcher, renderer=renderer,
+                                                    planner=planner))
     srv.daemon_threads = True
     return srv
 

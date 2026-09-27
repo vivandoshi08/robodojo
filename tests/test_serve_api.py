@@ -11,7 +11,7 @@ from robot_race import serve
 
 def test_validate_race_defaults_and_bounds():
     p = serve.validate_race({"task": "can_to_bin"})
-    assert p == {"task": "can_to_bin", "agents": 4, "seeds": "0", "tries": 5, "label": "", "memory": "tracker",
+    assert p == {"task": "can_to_bin", "agents": 4, "seeds": "0", "tries": 3, "label": "", "memory": "tracker",
                  "backend": "local"}
     assert serve.validate_race({"agents": 2, "seeds": "0-2", "backend": "qm"})["backend"] == "qm"
 

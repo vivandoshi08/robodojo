@@ -392,6 +392,40 @@ body.live .demo-only{display:none!important}
 .scroll p.md-p{margin:0;color:var(--ink-soft)}
 .lesson{display:block;margin-top:6px;color:var(--ink-soft);font-size:12.5px}
 
+
+/* ---------- strategy board ---------- */
+.sb-setup{display:flex;flex-wrap:wrap;gap:8px 14px;margin:8px 0 4px}
+.sb-setup label{display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
+.sb-setup label.chk{text-transform:none;letter-spacing:0;font:13px/1.2 var(--body);color:var(--ink)}
+.rd input,.rd select,.rd textarea{font:13px/1.4 var(--body);color:var(--ink);background:#040713;border:1px solid var(--glass-brd);border-radius:8px;padding:6px 8px}
+.rd input[type=number]{width:58px}.rd input[type=checkbox]{width:auto;accent-color:var(--riso)}
+.rd input:focus-visible,.rd select:focus-visible,.rd textarea:focus-visible,.rd button:focus-visible{outline:2px solid var(--riso);outline-offset:2px}
+.sb-custom{display:grid;gap:10px}
+.sb-row{display:grid;grid-template-columns:minmax(140px,220px) 1fr auto;gap:8px;align-items:start;padding:10px;border-radius:12px;background:var(--card);border:1px solid var(--glass-brd)}
+@media (max-width:700px){.sb-row{grid-template-columns:1fr}}
+.sb-row textarea{min-height:64px;resize:vertical;width:100%;box-sizing:border-box}
+.sb-row input{width:100%;box-sizing:border-box}
+.sb-row .count{font:11px var(--mono);color:var(--ink-soft);margin-top:3px}
+.rd button.primary{background:var(--riso);color:#050A1F;border-color:transparent;font-weight:600}
+.rd button.primary.gold{background:var(--gold);color:#2A1B00}
+.rd button.primary:disabled{opacity:.5;cursor:default}
+.rd button.x{border:1px solid var(--glass-brd);background:var(--card);color:var(--ink-soft);border-radius:99px;width:30px;height:30px;cursor:pointer}
+.rd button.x:hover{color:var(--miss);border-color:var(--miss)}
+.sb-go{align-items:center;margin-top:12px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:10px}
+.card-s{position:relative;padding:14px 14px 12px;border-radius:14px;background:var(--card);border:1px solid var(--glass-brd)}
+.card-s.custom{border-color:color-mix(in srgb,var(--gold) 55%,transparent)}
+.card-s h4{font-family:var(--display);font-weight:400;font-size:22px;margin:0 34px 4px 0}
+.card-s .approach{font-size:13px}
+.card-s .x{position:absolute;top:10px;right:10px}
+.card-s textarea{width:100%;box-sizing:border-box;min-height:80px}
+.card-s input{width:100%;box-sizing:border-box;margin-bottom:6px}
+.axes{display:grid;gap:6px;margin:6px 0}
+.axes div{font-size:12.5px;color:var(--ink-soft)}.axes b{color:var(--ink);font-weight:600}
+.strats .card-s{background:rgba(255,255,255,.035)}
+.strats h4{font-size:20px}
+.mat .mine{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:99px;font:600 10px/1.3 var(--mono);letter-spacing:.06em;
+  text-transform:uppercase;color:#2A1B00;background:var(--gold);vertical-align:middle}
 /* ---------- run detail (click a mat or a journal row) ---------- */
 .mat.clickable,.entry.clickable{cursor:pointer}
 .tries{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 0}
@@ -531,6 +565,7 @@ body.live .demo-only{display:none!important}
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="true" aria-controls="panelScroll" id="tabScroll">The scroll</button>
       <button role="tab" aria-selected="false" aria-controls="panelBelts" id="tabBelts">Belt ranks</button>
+      <button role="tab" aria-selected="false" aria-controls="panelStrats" id="tabStrats" class="live-only">Strategies</button>
     </div>
     <div class="tabpanel" role="tabpanel" id="panelScroll" aria-labelledby="tabScroll">
       <div class="scroll" id="scroll"><p class="empty">The scroll is empty. Win a sparring match and the proven techniques get written here as a readable skill.</p></div>
@@ -538,7 +573,39 @@ body.live .demo-only{display:none!important}
     <div class="tabpanel" role="tabpanel" id="panelBelts" aria-labelledby="tabBelts" hidden>
       <div class="belts" id="belts"></div>
     </div>
+    <div class="tabpanel live-only" role="tabpanel" id="panelStrats" aria-labelledby="tabStrats" hidden>
+      <div class="strats" id="strats"><p class="empty">No plan yet. Press Start race to draft strategies.</p></div>
+    </div>
   </section>
+</div>
+
+<div class="rd-veil" id="sbVeil" hidden>
+  <div class="rd sb" role="dialog" aria-modal="true" aria-labelledby="sbTitle">
+    <button type="button" class="rd-close" id="sbClose" aria-label="Close strategy board">×</button>
+    <h2 id="sbTitle">Strategy board</h2>
+    <p class="sub">Add your own ideas. The planner fills the rest. Review, then fight.</p>
+    <div class="sb-setup">
+      <label>Task <select id="sbTask" aria-label="Task"></select></label>
+      <label>Racers <input id="sbAgents" type="number" min="1" max="6" value="4" aria-label="Racers"></label>
+      <label>Seeds <input id="sbSeeds" value="0" size="5" aria-label="Seeds"></label>
+      <label>Tries <input id="sbTries" type="number" min="1" max="5" value="3" aria-label="Tries per seed"></label>
+      <label>Run on <select id="sbBackend" aria-label="Where racers run"><option value="local">Local sim</option><option value="qm">QM sandboxes</option></select></label>
+      <label>Label <input id="sbLabel" size="8" placeholder="warm" aria-label="Race label"></label>
+      <label class="chk"><input id="sbMemory" type="checkbox" checked> Use memory</label>
+    </div>
+    <h3>Your strategies</h3>
+    <div id="sbCustom" class="sb-custom"></div>
+    <div class="row-actions"><button type="button" id="sbAdd">+ Add your strategy</button></div>
+    <div class="row-actions sb-go">
+      <button type="button" id="sbPropose" class="primary">Propose plan</button>
+      <span class="note" id="sbState"></span>
+    </div>
+    <div id="sbPlan"></div>
+    <div class="row-actions sb-go" id="sbFightRow" hidden>
+      <button type="button" id="sbFight" class="primary gold">Fight</button>
+      <span class="note" id="sbFightNote"></span>
+    </div>
+  </div>
 </div>
 
 <div class="rd-veil" id="rdVeil" hidden>
@@ -940,7 +1007,7 @@ const startBtn=$('startBtn'), roundLabel=$('roundLabel'), verdict=$('verdict'), 
 $('tabBelts').textContent='Race history';
 document.querySelector('thead tr').innerHTML='<th>Racer</th><th class="num">Solved</th><th class="num">Avg time</th><th class="num">Collisions</th><th class="num">Score</th>';
 startBtn.textContent='Start race';
-matsEl.innerHTML='<p class="empty">No race yet. Pick a task and press Start race: the planner writes one strategy per agent, then every agent writes code and runs it in MuJoCo.</p>';
+matsEl.innerHTML='<p class="empty">No race yet. Press Start race.</p>';
 
 let backend='local', qm=null;
 let raceId=null, pinned=false, launchId=null, data=null, mats={}, agentKey='', filter='all', prevScroll=null, events={}, frameTick=0;
@@ -949,25 +1016,113 @@ let raceId=null, pinned=false, launchId=null, data=null, mats={}, agentKey='', f
 getJSON('/api/tasks').then(j=>{$('fTask').innerHTML=j.tasks.map(t=>`<option value="${esc(t.id)}" title="${esc(t.text)}">${esc(t.id)}</option>`).join('')}).catch(()=>{});
 fRace.addEventListener('change',()=>{pinned=!!fRace.value;raceId=fRace.value||raceId;agentKey='';qm=null;
   if(raceId)getJSON(`/api/races/${encodeURIComponent(raceId)}/qm`).then(j=>{qm=j}).catch(()=>{});tick()});
-$('launchForm').addEventListener('submit',e=>{e.preventDefault();start()});
-startBtn.addEventListener('click',start);
-async function start(){
-  if(launchId)return;
-  const body={task:$('fTask').value||'can_to_bin',agents:+$('fAgents').value,seeds:$('fSeeds').value.trim(),
-    tries:+$('fTries').value,label:$('fLabel').value.trim(),backend:$('fBackend').value};
-  startBtn.disabled=true;startBtn.textContent='Planning…';verdict.textContent='';
-  try{const j=await getJSON('/api/race',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    launchId=j.launch_id;pinned=false;raceId=null;agentKey='';backend=j.backend||'local';qm=null;
-    verdict.textContent=`Launched ${j.params.agents} agents on ${j.params.task}, seeds ${j.params.seeds}${backend==='qm'?' in QM sandboxes':''}. The planner is choosing strategies…`;
-  }catch(err){verdict.textContent=`Could not start: ${err.message}`;startBtn.disabled=false;startBtn.textContent='Start race'}
+$('launchForm').addEventListener('submit',e=>{e.preventDefault();openBoard()});
+startBtn.addEventListener('click',()=>openBoard());
+async function launch(body){
+  startBtn.disabled=true;startBtn.textContent='Starting…';verdict.textContent='';
+  const j=await getJSON('/api/race',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .catch(err=>{startBtn.disabled=false;startBtn.textContent='Start race';throw err});
+  launchId=j.launch_id;pinned=false;raceId=null;agentKey='';backend=j.backend||'local';qm=null;fRace.value='';
+  verdict.textContent=`${j.params.agents} racers on ${j.params.task}${backend==='qm'?' (QM)':''}. ${body.plan_id?'Racing…':'Planning…'}`;
+  return j;
 }
+
+/* ---------- strategy board: your strategies -> planner preview -> review cards -> fight ---------- */
+const sbVeil=$('sbVeil');
+const sb={custom:[],planId:null,plan:null,kept:[],timer:null};
+function sbAgents(){return Math.max(1,Math.min(6,+$('sbAgents').value||4))}
+function openBoard(){
+  if(launchId)return;
+  $('sbTask').innerHTML=$('fTask').innerHTML;$('sbTask').value=$('fTask').value;
+  $('sbAgents').value=$('fAgents').value||4;$('sbSeeds').value=$('fSeeds').value||'0';$('sbTries').value=$('fTries').value||3;
+  $('sbBackend').value=$('fBackend').value;$('sbLabel').value=$('fLabel').value;
+  renderCustom();renderPlan();sbVeil.hidden=false;document.body.style.overflow='hidden';
+}
+function closeBoard(){if(sb.timer)clearTimeout(sb.timer);sb.timer=null;sbVeil.hidden=true;document.body.style.overflow=''}
+$('sbClose').addEventListener('click',closeBoard);
+sbVeil.addEventListener('click',e=>{if(e.target===sbVeil)closeBoard()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!sbVeil.hidden)closeBoard()});
+function invalidatePlan(){if(sb.plan||sb.planId){sb.plan=null;sb.planId=null;sb.kept=[];renderPlan()}}
+['sbTask','sbAgents','sbMemory'].forEach(id=>$(id).addEventListener('change',()=>{invalidatePlan();renderCustom()}));
+function renderCustom(){
+  const box=$('sbCustom'), n=sbAgents();
+  box.innerHTML=sb.custom.length?sb.custom.map((c,i)=>`<div class="sb-row" data-i="${i}">
+      <div><input data-f="name" maxlength="60" placeholder="Name, e.g. Sweep" value="${esc(c.name)}" aria-label="Strategy name"></div>
+      <div><textarea data-f="approach" maxlength="1000" placeholder="e.g. Push the can off the table edge into the bin." aria-label="Approach">${esc(c.approach)}</textarea><div class="count">${c.approach.length}/1000</div></div>
+      <button type="button" class="x" data-act="del" aria-label="Remove ${esc(c.name||'strategy')}">×</button></div>`).join('')
+    :'<p class="note">None yet. The planner picks all racers.</p>';
+  $('sbAdd').disabled=sb.custom.length>=n;
+  $('sbAdd').textContent=sb.custom.length>=n?`All ${n} racers are yours`:'+ Add your strategy';
+  box.querySelectorAll('.sb-row').forEach(row=>{const i=+row.dataset.i;
+    row.querySelectorAll('[data-f]').forEach(inp=>inp.addEventListener('input',()=>{sb.custom[i][inp.dataset.f]=inp.value;
+      if(inp.dataset.f==='approach')row.querySelector('.count').textContent=`${inp.value.length}/1000`;invalidatePlan()}));
+    row.querySelector('[data-act="del"]').addEventListener('click',()=>{sb.custom.splice(i,1);invalidatePlan();renderCustom()})});
+}
+$('sbAdd').addEventListener('click',()=>{if(sb.custom.length>=sbAgents())return;sb.custom.push({name:'',approach:''});invalidatePlan();renderCustom();
+  const rows=$('sbCustom').querySelectorAll('.sb-row input');if(rows.length)rows[rows.length-1].focus()});
+function firstSeed(){const m=($('sbSeeds').value||'0').match(/\d+/);return m?+m[0]:0}
+$('sbPropose').addEventListener('click',async()=>{
+  const custom=sb.custom.filter(c=>c.approach.trim()).map(c=>({name:c.name.trim(),approach:c.approach.trim()}));
+  const body={task:$('sbTask').value||'can_to_bin',agents:sbAgents(),seed:firstSeed(),memory:$('sbMemory').checked?'tracker':'none',custom};
+  $('sbPropose').disabled=true;$('sbState').textContent='Sending to the planner…';sb.plan=null;sb.kept=[];renderPlan();
+  try{const j=await getJSON('/api/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    sb.planId=j.plan_id;$('sbState').textContent=j.llm?'Planning… (about a minute)':'Building plan…';
+    pollPlan();
+  }catch(err){$('sbState').textContent=`Could not plan: ${err.message}`;$('sbPropose').disabled=false}
+});
+function pollPlan(){
+  const id=sb.planId;if(!id)return;
+  getJSON(`/api/plan/${encodeURIComponent(id)}`).then(j=>{
+    if(sb.planId!==id)return;
+    if(j.state==='pending'){sb.timer=setTimeout(pollPlan,1500);return}
+    $('sbPropose').disabled=false;
+    if(j.state==='failed'){$('sbState').textContent=`Planner failed: ${j.error||'unknown error'}`;return}
+    sb.plan=j.plan;sb.kept=(j.plan.strategies||[]).map(x=>({...x}));$('sbState').textContent='Plan ready.';renderPlan();
+  }).catch(()=>{sb.timer=setTimeout(pollPlan,3000)});
+}
+function modeChip(m){return m?`<span class="chip${m==='custom'?' gold':''}">${m==='custom'?'your strategy':esc(m)}</span>`:''}
+function axesBlock(plan){
+  const ax=plan.axes||[];
+  return `${plan.coverage_rationale?`<p class="approach">${esc(plan.coverage_rationale)}</p>`:''}
+    ${ax.length?`<div class="axes">${ax.map(a=>`<div><b>${esc(a.name)}</b>: ${esc((a.options||[]).join(' / '))}${a.why_it_matters?` <span>(${esc(a.why_it_matters)})</span>`:''}</div>`).join('')}</div>`:''}
+    ${(plan.warnings||[]).map(w=>`<div class="banner">${esc(w)}</div>`).join('')}
+    <p class="note">${plan.model?esc(plan.model):'No planner call'}${plan.used_memory?' · used memory':''}</p>`;
+}
+function renderPlan(){
+  const box=$('sbPlan');
+  $('sbFightRow').hidden=!sb.plan;
+  if(!sb.plan){box.innerHTML='';return}
+  box.innerHTML=`<h3>Plan</h3>${axesBlock(sb.plan)}<div class="cards">${sb.kept.map((c,i)=>`<div class="card-s${c.mode==='custom'?' custom':''}" data-i="${i}">
+      <button type="button" class="x" data-act="drop" aria-label="Remove ${esc(c.name)} from the race">×</button>
+      ${c.mode==='custom'?`<input data-f="name" maxlength="60" value="${esc(c.name)}" aria-label="Name"><textarea data-f="approach" maxlength="1000" aria-label="Approach">${esc(c.approach)}</textarea>`
+        :`<h4>${esc(c.name)}</h4>`}
+      <div class="chips">${modeChip(c.mode)}<span class="chip">${esc(c.agent_id)}</span></div>
+      ${c.mode==='custom'?'':stratCard(c)}</div>`).join('')}</div>`;
+  box.querySelectorAll('.card-s').forEach(el=>{const i=+el.dataset.i;
+    el.querySelector('[data-act="drop"]').addEventListener('click',()=>{sb.kept.splice(i,1);renderPlan()});
+    el.querySelectorAll('[data-f]').forEach(inp=>inp.addEventListener('input',()=>{sb.kept[i][inp.dataset.f]=inp.value}))});
+  const seeds=($('sbSeeds').value||'0').trim();
+  $('sbFight').disabled=!sb.kept.length;
+  $('sbFightNote').textContent=sb.kept.length?`${sb.kept.length} racers · seeds ${seeds} · ${$('sbTries').value} tries · ${$('sbBackend').value==='qm'?'QM':'local'}`:'Keep at least one.';
+}
+$('sbFight').addEventListener('click',async()=>{
+  if(!sb.plan||!sb.kept.length)return;
+  const body={task:$('sbTask').value||'can_to_bin',agents:sb.kept.length,seeds:($('sbSeeds').value||'0').trim(),tries:+$('sbTries').value||3,
+    label:$('sbLabel').value.trim(),backend:$('sbBackend').value,memory:$('sbMemory').checked?'tracker':'none',plan_id:sb.planId,
+    strategies:sb.kept.map(c=>c.mode==='custom'?{agent_id:c.agent_id,name:(c.name||'').trim(),approach:(c.approach||'').trim()}:{agent_id:c.agent_id})};
+  $('sbFight').disabled=true;$('sbFightNote').textContent='Starting the race…';
+  try{await launch(body);
+    ['fTask','fSeeds','fTries','fBackend','fLabel'].forEach(k=>{$(k).value=$('sb'+k.slice(1)).value});$('fAgents').value=sb.kept.length;
+    sb.plan=null;sb.planId=null;sb.kept=[];sb.custom=[];closeBoard();
+  }catch(err){$('sbFightNote').textContent=`Could not start: ${err.message}`;$('sbFight').disabled=false}
+});
 async function pollLaunch(){
   if(!launchId)return;
   try{const st=await getJSON(`/api/launch/${launchId}`);
     if(st.race_id&&!pinned)raceId=st.race_id;
     if(st.error)verdict.textContent=`QM launch failed: ${st.error}`;
     else if(st.backend==='qm'&&st.result)verdict.textContent=qmMessage(st.result);
-    else if(!st.race_id)verdict.textContent=`Planning… ${st.log_tail.filter(l=>l&&!l.startsWith('{')).slice(-1)[0]||''}`;
+    else if(!st.race_id)verdict.textContent='Planning…';
     if(!st.running){launchId=null;startBtn.disabled=false;startBtn.textContent='Start next race';
       if(st.exit_code&&!st.race_id)verdict.textContent=`Race exited (${st.exit_code}): ${st.log_tail.slice(-3).join(' ')}`}
   }catch{launchId=null;startBtn.disabled=false;startBtn.textContent='Start race'}
@@ -980,6 +1135,8 @@ function agentsOf(d){
   d.runs.forEach(r=>{const a=(r.race||{}).agent_id;if(a&&!list.find(x=>x.id===a))list.push({id:a,name:(r.race||{}).strategy_name||a,desc:r.strategy||'',mode:''})});
   return list;
 }
+function gist(t,n=10){const w=String(t||'').split(/(?<=[.;:])\s/)[0].replace(/[.;:,]+$/,'').split(/\s+/).filter(Boolean);
+  return w.length>n?w.slice(0,n).join(' ')+'…':w.join(' ')}
 function buildMats(agents){
   mats={};matsEl.innerHTML='';
   agents.forEach((a,i)=>{
@@ -987,13 +1144,13 @@ function buildMats(agents){
     el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',`Open run detail for ${a.name}`);
     const pal=PAL[i%PAL.length];el.style.setProperty('--s',`var(--s-${pal})`);
     el.innerHTML=`<span class="crown">Race winner</span>
-    <div class="mat-head"><h2>${esc(a.name)}</h2><span class="belt"><i style="background:var(--s-${pal})"></i><span>${esc(a.id)}${a.mode?' · '+esc(a.mode):''}</span></span></div>
-    <p class="desc" title="${esc(a.desc)}">${esc(a.desc)}</p>
+    <div class="mat-head"><h2>${esc(a.name)}${a.mode==='custom'?'<span class="mine">your strategy</span>':''}</h2><span class="belt"><i style="background:var(--s-${pal})"></i><span>${esc(a.id)}${a.mode?' · '+esc(a.mode):''}</span></span></div>
+    <p class="desc" title="${esc(a.desc)}">${esc(gist(a.desc))}</p>
     <div class="screen"><span class="screen-tag">Waiting</span><div class="idle">waiting for first attempt</div></div>
     <p class="caption">Waiting on the mat</p>
     <div class="stats"><span><b data-in>0/0</b>solved</span><span><b data-time>–</b>s avg</span><span><b data-tries>0</b>tries</span></div>
     <div class="tries" data-tries-strip></div>
-    <p class="open-hint">Open full run ›</p>`;
+    <p class="open-hint">Open run ›</p>`;
     matsEl.appendChild(el);
     mats[a.id]={a,pal,el,screen:el.querySelector('.screen'),tag:el.querySelector('.screen-tag'),caption:el.querySelector('.caption'),
       in:el.querySelector('[data-in]'),time:el.querySelector('[data-time]'),tries:el.querySelector('[data-tries]'),strip:el.querySelector('[data-tries-strip]'),src:null,frames:null};
@@ -1023,11 +1180,11 @@ function showMedia(m,md){
 }
 setInterval(()=>{frameTick++;Object.values(mats).forEach(m=>{if(m.frames){const img=m.screen.querySelector('img');if(img)img.src=m.frames[frameTick%m.frames.length]}})},800);
 
-const EV={run_started:e=>'Agent started, reading the scene',attempt_started:e=>`Try ${e.attempt}: asking the model`,
-  model_request:e=>`Try ${e.attempt}: model is writing run(robot)…`,model_response:e=>e.error?`Model error: ${e.error}`:`Try ${e.attempt}: reply in ${num(e.latency_s)} s`,
-  code_generated:e=>`Try ${e.attempt}: code written, running in MuJoCo`,
-  attempt_finished:e=>{const r=e.result||{};return r.success?`Try ${e.attempt}: in the bin, ${num(r.time_s)} s`:`Try ${e.attempt}: missed${r.error?' ('+String(r.error).split('\n')[0].slice(0,90)+')':''}`},
-  run_finished:e=>e.status==='solved'?`Solved at try ${e.solved_at}`:`Finished: ${e.status}`};
+const EV={run_started:e=>'Reading the scene',attempt_started:e=>`Try ${e.attempt}: thinking`,
+  model_request:e=>`Try ${e.attempt}: writing code`,model_response:e=>e.error?'Model error':`Try ${e.attempt}: code ready`,
+  code_generated:e=>`Try ${e.attempt}: running in sim`,
+  attempt_finished:e=>{const r=e.result||{};return r.success?`Try ${e.attempt}: in the bin, ${num(r.time_s)} s`:`Try ${e.attempt}: missed`},
+  run_finished:e=>e.status==='solved'?`Solved on try ${e.solved_at}`:'Not solved'};
 async function pollEvents(run){
   const st=events[run.run_id]||(events[run.run_id]={next:0,last:null});
   if(st.done)return st.last;
@@ -1098,11 +1255,11 @@ async function render(d){
   }
   scoreBody.innerHTML=sc.map(s=>{const pal=(mats[s.agent_id]||{}).pal||'place';return `<tr><td><span class="dot" style="color:var(--s-${pal});background:var(--s-${pal})"></span>${esc(s.name)}</td><td class="num">${s.solved??0}/${s.seeds??0}</td><td class="num">${s.time!=null?num(s.time)+' s':'–'}</td><td class="num">${num(s.coll,1)}</td><td class="num"><b>${s.score??'–'}</b></td></tr>`}).join('');
   const lines=(d.close&&d.close.lessons&&d.close.lessons.lines)||[];
-  if(d.close&&winner){const w=sc.find(x=>x.agent_id===winner)||{};verdict.innerHTML=`${esc(w.name||winner)} wins: ${w.solved}/${w.seeds} seeds solved${w.time!=null?', '+num(w.time)+' s average':''}. The winning code is distilled into the scroll.`+lines.map(l=>`<span class="lesson">${esc(l)}</span>`).join('')}
+  if(d.close&&winner){const w=sc.find(x=>x.agent_id===winner)||{};verdict.innerHTML=`${esc(w.name||winner)} wins · ${w.solved}/${w.seeds} solved${w.time!=null?' · '+num(w.time)+' s':''}`+lines.map(l=>`<span class="lesson">${esc(l)}</span>`).join('')}
   else if(d.race&&d.race.local_ranking){const b=d.race.local_ranking[0];verdict.textContent=b?`${b.strategy} leads with ${b.solved}/${b.seeds} solved (no tracker, local ranking).`:''}
   else if(!launchId){const done=d.runs.filter(r=>r.status!=='running').length;
-    verdict.textContent=d.runs.length?`Racing: ${done} of ${d.runs.length} racers finished.`:qmMessage(d.launch)}
-  renderJournal(d,agents);renderContext(d);
+    verdict.textContent=d.runs.length?`Racing · ${done}/${d.runs.length} done`:qmMessage(d.launch)}
+  renderJournal(d,agents);renderContext(d);renderStrats(d);
   const hm=!deepLinked&&location.hash.match(/^#detail=([\w.-]+)(?:\/(\d+))?/);   // #detail=agent-2[/<try>]
   if(hm&&agents.find(a=>a.id===hm[1])){deepLinked=true;openDetail({agent:hm[1],k:hm[2]?+hm[2]:null})}
 }
@@ -1135,11 +1292,11 @@ function renderJournal(d,agents){
     if(seen.has(key)||(filter!=='all'&&t.agent_id!==filter))return;
     const a=agents.find(x=>x.id===t.agent_id)||{name:t.agent_id};
     rows.push({run:{seed:t.seed,updated_at:t.recorded_at||t.ts||0,hints:null},ag:t.agent_id,a,at:{...t,k:t.attempt},fm:t.failure_mode})});
-  if(!rows.length){journal.innerHTML='<p class="empty">No attempts yet. Every try lands here with why it hit or missed.</p>';return}
+  if(!rows.length){journal.innerHTML='<p class="empty">No attempts yet.</p>';return}
   rows.sort((x,y)=>(y.run.updated_at||0)-(x.run.updated_at||0)||y.at.k-x.at.k);
   journal.innerHTML=rows.slice(0,120).map(({run,ag,a,at,fm})=>{
     const pal=(mats[ag]||{}).pal||'place';
-    const recall=at.k===1&&run.hints&&run.hints.context?'<span class="recall">Started with recalled memory (GBrain skill + Memorable)</span>':'';
+    const recall=at.k===1&&run.hints&&run.hints.context?'<span class="recall">recalled memory</span>':'';
     return `<div class="entry clickable ${at.success?'ok':'bad'}" style="--s:var(--s-${pal})" data-agent="${esc(ag)}" data-run="${esc(run.run_id||'')}" data-seed="${esc(run.seed)}" data-k="${esc(at.k)}" tabindex="0" role="button"><span class="mark" aria-label="${at.success?'Hit':'Miss'}">${at.success?'✓':'✗'}</span><div><span class="who">${esc(a.name)}</span><span class="rnd">S${run.seed} T${at.k}</span><br><span class="why">${esc(reason(at,fm))}</span>${recall}</div></div>`;
   }).join('');
 }
@@ -1193,6 +1350,21 @@ function renderHistory(list){
 }
 
 
+/* ---------- strategies panel: the current race's plan ---------- */
+const stratsEl=$('strats');let stratsKey='';
+function renderStrats(d){
+  const plan=d.plan, key=d.race_id+'|'+JSON.stringify((plan&&plan.strategies||[]).map(x=>x.agent_id+x.name));
+  if(key===stratsKey)return;stratsKey=key;
+  if(!plan||!(plan.strategies||[]).length){stratsEl.innerHTML='<p class="empty">No plan yet.</p>';return}
+  stratsEl.innerHTML=`<p class="ver">${esc(d.race_id)}${plan.edited?' · reviewed':''}</p>${axesBlock(plan)}
+    <div class="cards">${plan.strategies.map(c=>`<div class="card-s clickable${c.mode==='custom'?' custom':''}" data-agent="${esc(c.agent_id)}" tabindex="0" role="button" aria-label="Open run detail for ${esc(c.name)}">
+      <h4>${esc(c.name)}</h4><div class="chips">${modeChip(c.mode)}<span class="chip">${esc(c.agent_id)}</span></div>${stratCard(c)}</div>`).join('')}</div>`;
+}
+stratsEl.addEventListener('click',e=>{const c=e.target.closest('.card-s[data-agent]');if(c)openDetail({agent:c.dataset.agent})});
+stratsEl.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('.card-s[data-agent]'))e.target.click()});
+{const tabs=[['tabScroll','panelScroll'],['tabBelts','panelBelts'],['tabStrats','panelStrats']];   // live tab switching
+  tabs.forEach(([t,p])=>$(t).addEventListener('click',()=>tabs.forEach(([t2,p2])=>{$(t2).setAttribute('aria-selected',t2===t);$(p2).hidden=p2!==p})));}
+
 /* ---------- run detail: click a mat or a journal row ---------- */
 const veil=$('rdVeil'), rdBody=$('rdBody');
 let rd=null;   // {agent, runId, seed, k, summary, timer}
@@ -1243,9 +1415,9 @@ function drawDetail(){
   const hints=(s&&s.hints)||{};
   const banners=[];
   if(s&&s.scripted)banners.push('SCRIPTED DEMO, NOT A MODEL');
-  if(hints.example)banners.push('Hint given: reference example in prompt');
-  if(hints.strategy)banners.push(mode==='custom'?'Hint given: your strategy (custom card) in prompt':'Hint given: planner strategy card in prompt');
-  if(hints.context)banners.push('Hint given: recalled memory (GBrain skill + Memorable) in prompt');
+  if(hints.example)banners.push('Hint: reference example');
+  if(hints.strategy)banners.push(mode==='custom'?'Hint: your strategy':'Hint: planner strategy');
+  if(hints.context)banners.push('Hint: recalled memory');
   const status=s?s.status:(trk.some(a=>a.success)?'solved':trk.length?'attempted':'waiting');
   let h=`<h2 id="rdTitle">${esc(name)}</h2>
   <p class="sub">${esc(ag)} · race ${esc(d.race_id)}${rd.seed!=null?` · seed ${esc(rd.seed)}`:''}${s&&s.model?` · ${esc(s.model)}`:''}${rd.runId?` · <span style="font-family:var(--mono)">${esc(rd.runId)}</span>`:''}</p>
@@ -1261,11 +1433,11 @@ function drawDetail(){
   const cur=atts.find(a=>a.k===rd.k)||atts[atts.length-1];
   if(cur)rd.k=cur.k;
   h+=atts.length?`<div class="rd-tabs" data-role="attempts">${atts.map(a=>`<button type="button" data-k="${a.k}" aria-pressed="${a.k===rd.k}" class="${a.r.success?'ok':'bad'}">Try ${a.k}</button>`).join('')}${s&&s.status==='running'?`<button type="button" disabled>Try ${atts.length+1} running…</button>`:''}</div>`
-    :`<p class="note">${s&&s.status==='running'?'First attempt is running: the model is writing run(robot).':'No attempts recorded yet.'}</p>`;
+    :`<p class="note">${s&&s.status==='running'?'Try 1 running…':'No attempts yet.'}</p>`;
   h+=`<div class="rd-grid"><div>
       <div class="rd-player" id="rdPlayer"><div class="state">${cur?'Loading video…':'Waiting'}</div></div>
       <div class="rd-frames" id="rdFrames"></div>
-      <div class="row-actions">${rd.runId?`<a href="/${encodeURIComponent(rd.runId)}/trace.html" target="_blank" rel="noopener">Full audit trace ↗</a><a href="/${encodeURIComponent(rd.runId)}/index.html" target="_blank" rel="noopener">Run gallery ↗</a>`:''}${cur&&rd.runId?`<a href="/${encodeURIComponent(rd.runId)}/attempt_${cur.k}/" target="_blank" rel="noopener">Attempt files ↗</a>`:''}</div>
+      <div class="row-actions">${rd.runId?`<a href="/${encodeURIComponent(rd.runId)}/trace.html" target="_blank" rel="noopener">Audit trace ↗</a><a href="/${encodeURIComponent(rd.runId)}/index.html" target="_blank" rel="noopener">Gallery ↗</a>`:''}${cur&&rd.runId?`<a href="/${encodeURIComponent(rd.runId)}/attempt_${cur.k}/" target="_blank" rel="noopener">Files ↗</a>`:''}</div>
     </div><div>
       ${scoreCard(row,rank)}
       ${memoryBlock(hints,d)}
@@ -1275,11 +1447,11 @@ function drawDetail(){
   rdBody.querySelectorAll('[data-role="seeds"] button').forEach(b=>b.addEventListener('click',()=>{const r=runs.find(x=>x.run_id===b.dataset.run);openDetail({agent:ag,runId:b.dataset.run,seed:r&&r.seed})}));
   rdBody.querySelectorAll('[data-role="attempts"] button[data-k]').forEach(b=>b.addEventListener('click',()=>{rd.k=+b.dataset.k;if(rd.timer)clearTimeout(rd.timer);drawDetail()}));
   const ctxBtn=rdBody.querySelector('[data-act="ctx"]');
-  if(ctxBtn)ctxBtn.addEventListener('click',()=>{const p=rdBody.querySelector('#rdCtx');p.hidden=!p.hidden;ctxBtn.textContent=p.hidden?'Show what was recalled':'Hide recalled context'});
+  if(ctxBtn)ctxBtn.addEventListener('click',()=>{const p=rdBody.querySelector('#rdCtx');p.hidden=!p.hidden;ctxBtn.textContent=p.hidden?'Show recall':'Hide recall'});
   if(cur)drawAttempt(cur,trk.find(a=>a.seed===rd.seed&&a.attempt===cur.k)||(cur.trk?cur.r:null));
 }
 function scoreCard(row,rank){
-  if(!row)return `<div class="score-card"><p class="note">No tracker score yet${data.tracker?'':' (tracker not reachable)'}: the leaderboard fills in as attempts land.</p></div>`;
+  if(!row)return `<div class="score-card"><p class="note">No score yet.</p></div>`;
   const bd=row.score_breakdown?Object.entries(row.score_breakdown).map(([k,v])=>`${k} ${(+v).toFixed(1)}`).join(' · '):'';
   const fm=row.failure_modes&&Object.keys(row.failure_modes).length?Object.entries(row.failure_modes).map(([k,v])=>`${k.replace(/_/g,' ')} ×${v}`).join(', '):'none';
   return `<div class="score-card"><span class="note">Race score${rank?` · rank #${rank}`:''}</span><div class="big">${(+row.score).toFixed(1)}</div>
@@ -1293,8 +1465,8 @@ function scoreCard(row,rank){
 }
 function memoryBlock(hints,d){
   if(!hints.context&&!d.context)return '';
-  return `<h3>Memory</h3><p class="note">${hints.context?'This racer started with recalled memory: the GBrain skill, a gbrain think synthesis of past races and Memorable episodes.':'This race recalled memory, but this run did not record it in its prompt.'}</p>
-    ${d.context?`<div class="row-actions"><button type="button" data-act="ctx">Show what was recalled</button></div><pre class="wrap" id="rdCtx" hidden>${esc(d.context)}</pre>`:''}`;
+  return `<h3>Memory</h3><p class="note">${hints.context?'Started from GBrain + Memorable recall.':'No recall in this run.'}</p>
+    ${d.context?`<div class="row-actions"><button type="button" data-act="ctx">Show recall</button></div><pre class="wrap" id="rdCtx" hidden>${esc(d.context)}</pre>`:''}`;
 }
 async function drawAttempt(cur,t){
   const r=cur.r||{}, box=rdBody.querySelector('#rdAttempt'), local=!cur.trk&&rd.runId;
@@ -1314,10 +1486,10 @@ async function drawAttempt(cur,t){
     ${r.wall_s!=null?`<div><b>${num(r.wall_s)} s</b><span>wall clock</span></div>`:''}
   </div>
   ${r.error?`<div class="err">${esc(String(r.error).slice(0,1500))}</div>`:''}
-  <h3>Timeline of robot calls</h3><div class="calls-wrap" id="rdCalls"><p class="note" style="padding:8px">${local?'Loading calls…':'Call timeline is in calls.json, which stays in the QM sandbox until qm/finish_race.sh collects the run.'}</p></div>
-  <h3>Code that ran</h3><div class="row-actions"><button type="button" data-act="copy">Copy code</button></div>
+  <h3>Robot calls</h3><div class="calls-wrap" id="rdCalls"><p class="note" style="padding:8px">${local?'Loading…':'In the QM sandbox until collected.'}</p></div>
+  <h3>Code</h3><div class="row-actions"><button type="button" data-act="copy">Copy</button></div>
   <pre id="rdCode">${esc(cur.code||'(code not recorded)')}</pre>
-  ${local?`<details id="rdReason"><summary>The model's full reply (reasoning + code)</summary><pre class="wrap">Loading…</pre></details>`:''}`;
+  ${local?`<details id="rdReason"><summary>Model reply</summary><pre class="wrap">Loading…</pre></details>`:''}`;
   box.innerHTML=h;
   box.querySelector('[data-act="copy"]').addEventListener('click',e=>{navigator.clipboard&&navigator.clipboard.writeText(cur.code||'').then(()=>{e.target.textContent='Copied'},()=>{e.target.textContent='Copy failed'})});
   const rs=box.querySelector('#rdReason');
@@ -1337,7 +1509,7 @@ async function drawAttempt(cur,t){
     if(t.video){player.innerHTML=`<video controls playsinline src="${src}video"></video>`}
     else if(t.frames&&t.frames.length){player.innerHTML=`<img src="${src}frame${t.frames.length-1}" alt="Final frame"><div class="state">Key frames from the tracker</div>`;
       frames.innerHTML=t.frames.map((f,i)=>`<img src="${src}frame${i}" alt="Key frame ${i+1}">`).join('')}
-    else player.innerHTML='<div class="state">This attempt ran in a QM sandbox. The video appears after qm/finish_race.sh collects the run.</div>';
+    else player.innerHTML='<div class="state">Video after QM runs are collected</div>';
   }
 }
 function setPlayer(html){const p=rdBody.querySelector('#rdPlayer');if(p)p.innerHTML=html;return p}
@@ -1358,7 +1530,7 @@ async function playVideo(base,m,k){
       if(x.state==='failed'){setPlayer(`${poster?`<img src="${poster}" alt="Final frame">`:''}<div class="state">Render failed: ${esc((x.error||'').slice(0,160))}</div>`);return}
       rd.timer=setTimeout(wait,1500)}).catch(()=>{rd.timer=setTimeout(wait,3000)})};
   if(st.state==='done')return show();
-  setPlayer(`${poster?`<img src="${poster}" alt="Final frame">`:''}<div class="state">${st.state==='failed'?`Render busy: ${esc((st.error||'').slice(0,120))}, retrying…`:'Rendering the full video from the trajectory…'}</div>`);
+  setPlayer(`${poster?`<img src="${poster}" alt="Final frame">`:''}<div class="state">${st.state==='failed'?`Render queue busy, retrying…`:'Rendering video…'}</div>`);
   rd.timer=setTimeout(st.state==='failed'?()=>playVideo(base,m,k):wait,st.state==='failed'?4000:1500);
 }
 let calls=[];
@@ -1373,7 +1545,7 @@ async function loadCalls(base){
       ${ex?`<div class="err" style="padding:8px">${esc(ex.type)}: ${esc(ex.message)}${ex.sim_time!=null?` at t=${num(ex.sim_time,2)} s`:''}${ex.in_call?` in ${esc(ex.in_call)}`:''}</div>`:''}`;
     box.querySelectorAll('tr.seek').forEach(tr=>tr.addEventListener('click',()=>{const v=rdBody.querySelector('#rdPlayer video');if(!v)return;
       v.currentTime=(Math.round(+tr.dataset.t*30)+0.5)/30;v.pause()}));
-  }catch{box.innerHTML='<p class="note" style="padding:8px">No calls.json for this attempt (it stopped before the sim ran).</p>'}
+  }catch{box.innerHTML='<p class="note" style="padding:8px">No calls (never reached the sim).</p>'}
 }
 function markCall(t){
   const rows=rdBody.querySelectorAll('#rdCalls tr.seek');let idx=-1;
