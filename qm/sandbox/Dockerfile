@@ -28,7 +28,8 @@ COPY policies policies
 COPY scripts scripts
 COPY run_agent.py run_policy.py ./
 COPY qm/skills qm/skills
-COPY qm/strategies.json qm/strategies.json
+COPY qm/strategies.json qm/plan_to_contexts.py qm/
+COPY racetrack racetrack
 
 # Smoke check at build time: the reference policy lands the can with no video.
 RUN uv run --no-sync python -c "\

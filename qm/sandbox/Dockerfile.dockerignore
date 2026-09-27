@@ -8,3 +8,5 @@ gbrain
 .claude
 *.zip
 *.gif
+racetrack/*.db
+races

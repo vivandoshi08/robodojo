@@ -4,7 +4,9 @@
     python ingest.py runs/ --race phase1 --agent agent-1 --watch     # keep picking up new attempts
 
 Identity comes from fields inside result.json if present (agent_id, seed, attempt), otherwise
-from the folder names: "seed0" / "seed_0", "attempt2" / "try_2", "agent-1" / "agent_a".
+from the folder names: "seed0" / "seed_0", "attempt2" / "try_2", "agent-1" / "agent_a", and QM
+sandbox run ids "<strategy>-a<k>" (runs/qm/<container>/place-a2/seed_0/result.json -> agent "place",
+attempt 2; see qm/collect_runs.sh).
 Files it can't place are listed and skipped.
 """
 from __future__ import annotations
@@ -21,6 +23,7 @@ from client import Tracker
 SEED = re.compile(r"seed[_-]?(\d+)", re.I)
 ATTEMPT = re.compile(r"(?:attempt|try)[_-]?(\d+)", re.I)
 AGENT = re.compile(r"(agent[_-]?[A-Za-z0-9]+)", re.I)
+QM_RUN = re.compile(r"(?:^|/)([A-Za-z0-9_.]+(?:-[A-Za-z0-9_.]+)*?)-a(\d+)(?=/|$)")
 
 
 def identify(rel_dir: Path, data: dict, default_agent: str) -> Optional[tuple[str, int, int]]:
@@ -30,6 +33,11 @@ def identify(rel_dir: Path, data: dict, default_agent: str) -> Optional[tuple[st
     seed = data.get("seed")
     attempt = data.get("attempt")
     agent = data.get("agent_id")
+    if (qm := QM_RUN.findall(text)):
+        if attempt is None:
+            attempt = int(qm[-1][1])
+        if agent is None and not AGENT.search(text):
+            agent = qm[-1][0]
     if seed is None and (m := SEED.findall(text)):
         seed = int(m[-1])
     if attempt is None and (m := ATTEMPT.findall(text)):

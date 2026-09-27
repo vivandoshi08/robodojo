@@ -24,5 +24,6 @@ export class GBrain {
     return out;
   }
 
-  put = (slug: string, markdown: string) => this.run(["put", slug], markdown);
+  // --force: distill re-puts the same page after every race (plain put is create-only).
+  put = (slug: string, markdown: string) => this.run(["put", slug, "--force"], markdown);
 }

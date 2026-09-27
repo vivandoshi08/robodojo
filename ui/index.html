@@ -88,9 +88,9 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;opa
 header{position:relative;display:grid;grid-template-columns:1fr auto;align-items:end;gap:18px 28px;
   padding:6px 0 26px;margin-bottom:26px;border-bottom:1px solid var(--glass-brd);overflow:hidden}
 .dots{position:absolute;inset:-20px -40px 0 30%;z-index:0;pointer-events:none;
-  background-image:radial-gradient(circle,var(--riso) 42%,transparent 44%);background-size:9px 9px;opacity:.17;
+  background-image:radial-gradient(circle at center,var(--riso) 30%,transparent 33%);background-size:13px 13px;opacity:.26;
   -webkit-mask-image:linear-gradient(115deg,transparent 18%,#000 55%,transparent 88%);mask-image:linear-gradient(115deg,transparent 18%,#000 55%,transparent 88%)}
-.dots.fine{background-size:5px 5px;opacity:.10;-webkit-mask-image:linear-gradient(115deg,transparent 45%,#000 70%,transparent 100%);mask-image:linear-gradient(115deg,transparent 45%,#000 70%,transparent 100%)}
+.dots.fine{background-image:radial-gradient(circle at center,var(--gold) 26%,transparent 30%);background-size:7px 7px;opacity:.14;-webkit-mask-image:linear-gradient(115deg,transparent 45%,#000 70%,transparent 100%);mask-image:linear-gradient(115deg,transparent 45%,#000 70%,transparent 100%)}
 .titleblock{position:relative;z-index:1}
 h1{font-family:var(--display);font-weight:400;font-size:clamp(58px,10.5vw,142px);line-height:.86;
   margin:0 0 -.1em;padding-bottom:.14em;letter-spacing:-.018em;
@@ -125,7 +125,7 @@ button:active{transform:translateY(1px)}
 @media (max-width:900px){.main{grid-template-columns:1fr}}
 
 /* ---- blueprint mats, floating in glass ---- */
-.mats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.mats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start;align-content:start}
 @media (max-width:620px){.mats{grid-template-columns:1fr}}
 .mat{position:relative;padding:16px 18px 14px;color:var(--ink);border-radius:var(--r);
   background:var(--glass);border:1px solid var(--glass-brd);
@@ -271,41 +271,60 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
 .beltcard p b{color:var(--ink);font-weight:500}
 
 /* ---------------- the gate: the dojo opens ----------------
-   A pair of shoji screens closed over the page. The title, the promise
-   and the sponsors sit on them; "Enter the dojo" slides them apart and
-   the sparring floor is behind. ?nogate=1 skips it while iterating. */
+   Built from two references: a real shoji room (fine lattice, low
+   contrast, light behind the paper) and a riso halftone field. Entering
+   slides the screens apart and the halftone dissolves with them.
+   ?nogate=1 skips it while iterating. */
 .gate{position:fixed;inset:0;z-index:100;display:grid;place-items:center;overflow:hidden;background:var(--void);
   transition:opacity .55s ease 1s,visibility 0s linear 1.55s}
 .gate.open{opacity:0;visibility:hidden;pointer-events:none}
 .gate[hidden]{display:none}
-.gate-glow{position:absolute;top:50%;left:50%;width:min(64vw,760px);height:130vh;translate:-50% -50%;
-  background:radial-gradient(closest-side,rgba(233,184,76,.26),rgba(59,87,228,.18) 46%,transparent 74%);
-  filter:blur(26px);animation:breathe 6s ease-in-out infinite}
-@keyframes breathe{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.07)}}
 
-.shoji{position:absolute;top:-2%;bottom:-2%;width:50.3%;z-index:1;
-  background:
-    repeating-linear-gradient(to right,transparent 0 calc(100%/6 - 2px),rgba(214,192,148,.26) calc(100%/6 - 2px) calc(100%/6)),
-    repeating-linear-gradient(to bottom,transparent 0 84px,rgba(214,192,148,.26) 84px 86px),
-    linear-gradient(180deg,#131B37,#080E22);
-  box-shadow:inset 0 0 140px rgba(0,0,0,.85);
+/* light behind the paper, brightest at the seam */
+.gate-glow{position:absolute;top:50%;left:50%;width:min(58vw,720px);height:132vh;translate:-50% -50%;
+  background:radial-gradient(closest-side,rgba(233,184,76,.22),rgba(59,87,228,.15) 48%,transparent 76%);
+  filter:blur(30px);animation:breathe 7s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:.95;transform:scale(1.06)}}
+
+/* riso halftone, two densities drifting against each other (ref: dot field) */
+.halftone{position:absolute;inset:-10%;z-index:2;pointer-events:none;
+  transition:opacity .5s ease}
+.halftone.a{background-image:radial-gradient(circle at center,var(--riso) 30%,transparent 33%);
+  background-size:13px 13px;opacity:.30;
+  -webkit-mask-image:radial-gradient(52% 46% at 24% 30%,#000 0%,transparent 72%);
+  mask-image:radial-gradient(52% 46% at 24% 30%,#000 0%,transparent 72%);
+  animation:drift 30s ease-in-out infinite alternate}
+.halftone.b{background-image:radial-gradient(circle at center,var(--gold) 26%,transparent 30%);
+  background-size:7px 7px;opacity:.17;
+  -webkit-mask-image:radial-gradient(48% 44% at 78% 72%,#000 0%,transparent 70%);
+  mask-image:radial-gradient(48% 44% at 78% 72%,#000 0%,transparent 70%);
+  animation:drift 38s ease-in-out infinite alternate-reverse}
+@keyframes drift{from{background-position:0 0}to{background-position:90px 60px}}
+.gate.open .halftone{opacity:0}
+
+/* the screens. Low-contrast lattice on faintly lit paper, fading at the
+   rails, so it reads as a shoji panel and not as a grid over the page. */
+.shoji{position:absolute;top:-2%;bottom:-2%;width:50.3%;z-index:1;overflow:hidden;
+  background:linear-gradient(180deg,rgba(20,29,60,.93) 0%,rgba(12,19,41,.95) 58%,rgba(8,13,31,.97) 100%);
+  box-shadow:inset 0 0 150px rgba(0,0,0,.9);
   transition:transform 1.5s cubic-bezier(.76,0,.24,1)}
-.shoji.left{left:0;border-right:3px solid rgba(214,192,148,.42)}
-.shoji.right{right:0;border-left:3px solid rgba(214,192,148,.42)}
+.shoji::before{content:"";position:absolute;inset:0;
+  background:
+    repeating-linear-gradient(to right,transparent 0 calc(25% - 1.4px),rgba(3,6,14,.6) calc(25% - 1.4px) 25%),
+    repeating-linear-gradient(to bottom,transparent 0 calc(88px - 1.4px),rgba(3,6,14,.6) calc(88px - 1.4px) 88px);
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 20%,#000 80%,transparent);
+  mask-image:linear-gradient(180deg,transparent,#000 20%,#000 80%,transparent)}
+/* rice-paper tooth */
+.shoji::after{content:"";position:absolute;inset:0;opacity:.5;mix-blend-mode:screen;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .38 0 0 0 0 .6 0 0 0 .35 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E")}
+.shoji.left{left:0;border-right:1px solid rgba(233,184,76,.3);
+  box-shadow:inset 0 0 150px rgba(0,0,0,.9),6px 0 40px -6px rgba(233,184,76,.16)}
+.shoji.right{right:0;border-left:1px solid rgba(233,184,76,.3);
+  box-shadow:inset 0 0 150px rgba(0,0,0,.9),-6px 0 40px -6px rgba(233,184,76,.16)}
 .gate.open .shoji.left{transform:translateX(-101%)}
 .gate.open .shoji.right{transform:translateX(101%)}
 
-.petals{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
-.petal{position:absolute;top:-8vh;width:10px;height:10px;opacity:0;
-  border-radius:12px 2px 12px 2px;background:linear-gradient(140deg,#F8CCDA,#E2839F);
-  animation:fall linear infinite}
-@keyframes fall{
-  0%{opacity:0;transform:translate3d(0,-8vh,0) rotate(0)}
-  9%{opacity:.7}
-  88%{opacity:.45}
-  100%{opacity:0;transform:translate3d(var(--dx,50px),114vh,0) rotate(560deg)}}
-
-.gate-inner{position:relative;z-index:3;text-align:center;padding:28px 24px;max-width:min(94vw,820px);
+.gate-inner{position:relative;z-index:3;text-align:center;padding:28px 24px;max-width:min(94vw,860px);
   transition:opacity .45s ease,transform .7s cubic-bezier(.3,0,.2,1)}
 .gate.open .gate-inner{opacity:0;transform:translateY(-20px) scale(.97)}
 .gate-inner>*{animation:rise .95s cubic-bezier(.2,.75,.2,1) both}
@@ -325,32 +344,164 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
 .gate-sub{color:#BAC4DE;font-weight:300;font-size:16px;margin:22px auto 32px;max-width:46ch}
 .gate-enter{padding:14px 36px;font-size:16px}
 
-.sponsors{margin-top:46px;padding-top:24px;border-top:1px solid rgba(255,255,255,.1)}
+.sponsors{margin-top:48px;padding-top:26px;border-top:1px solid rgba(255,255,255,.1)}
 .sponsors-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;
-  color:#AFBAD6;margin:0 0 18px}
-.sponsors ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;justify-content:center;gap:18px 30px}
-.sponsors li{display:flex;flex-direction:column;gap:5px}
-.sponsors b{font-family:var(--display);font-weight:400;font-size:22px;letter-spacing:.01em;color:var(--ink);
-  white-space:nowrap}
-.sponsors span{font-family:var(--mono);font-size:10.5px;font-weight:400;letter-spacing:.1em;
-  text-transform:uppercase;color:#B7C1DB;white-space:nowrap}
-@media (max-width:560px){.sponsors ul{gap:16px 20px}.sponsors b{font-size:18px}.sponsors span{font-size:9.5px}}
+  color:#AFBAD6;margin:0 0 20px}
+.sponsors ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;justify-content:center;
+  align-items:flex-start;gap:20px 30px}
+.sponsors li{display:flex;flex-direction:column;align-items:center;gap:9px;width:116px}
+.spicon{width:40px;height:40px;border-radius:11px;overflow:hidden;display:grid;place-items:center;
+  border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 20px -10px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.14)}
+.spicon img{width:100%;height:100%;object-fit:cover;display:block}
+.spicon.mark{font-family:var(--display);font-size:19px;letter-spacing:.01em;color:var(--gold);
+  background:linear-gradient(158deg,#1B2A55,#0E1732)}
+.sponsors b{font-family:var(--display);font-weight:400;font-size:19px;letter-spacing:.01em;color:var(--ink);
+  line-height:1.1;white-space:nowrap}
+.sponsors .srole{font-family:var(--mono);font-size:9.5px;font-weight:400;letter-spacing:.08em;
+  text-transform:uppercase;color:#AAB5D1;line-height:1.35}
+@media (max-width:560px){.sponsors ul{gap:16px 16px}.sponsors li{width:92px}
+  .sponsors b{font-size:16px}.sponsors .srole{font-size:8.5px}.spicon{width:34px;height:34px}}
 
 @media (prefers-reduced-motion:reduce){
-  .petals{display:none}
-  .gate-glow{animation:none}
+  .gate-glow,.halftone{animation:none}
   .gate-inner>*{animation:none}
 }
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---- live mode ---- */
+body.demo .live-only{display:none!important}
+body.live .demo-only{display:none!important}
+.launch{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.launch label{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-soft)}
+.launch select,.launch input{font:inherit;font-family:var(--mono);font-size:12px;letter-spacing:0;text-transform:none;
+  color:var(--ink);background:rgba(0,0,0,.3);border:1px solid var(--glass-brd);border-radius:999px;padding:6px 10px;max-width:190px}
+.launch input[type=number]{width:54px}
+.launch select:focus-visible,.launch input:focus-visible{outline:2px solid var(--riso);outline-offset:2px}
+.screen img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--bp)}
+.screen .idle{display:grid;place-items:center;aspect-ratio:4/3;color:var(--ink-soft);font-family:var(--mono);
+  font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.mat .desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.ctx{margin:0 0 12px;font-size:12.5px;color:var(--ink-soft)}
+.ctx summary{cursor:pointer;color:var(--riso)}
+.ctx pre{white-space:pre-wrap;max-height:220px;overflow:auto;font-family:var(--mono);font-size:11px;line-height:1.5;
+  margin:8px 0 0;padding:10px;border-radius:10px;background:rgba(0,0,0,.3);border:1px solid var(--glass-brd)}
+.scroll pre{font-family:var(--mono);font-size:12px;line-height:20px;white-space:pre-wrap;margin:8px 0;padding:10px;
+  background:rgba(0,0,0,.28);border-radius:8px}
+.scroll p.md-p{margin:0;color:var(--ink-soft)}
+.lesson{display:block;margin-top:6px;color:var(--ink-soft);font-size:12.5px}
+
+
+/* ---------- strategy board ---------- */
+.sb-setup{display:flex;flex-wrap:wrap;gap:8px 14px;margin:8px 0 4px}
+.sb-setup label{display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
+.sb-setup label.chk{text-transform:none;letter-spacing:0;font:13px/1.2 var(--body);color:var(--ink)}
+.rd input,.rd select,.rd textarea{font:13px/1.4 var(--body);color:var(--ink);background:#040713;border:1px solid var(--glass-brd);border-radius:8px;padding:6px 8px}
+.rd input[type=number]{width:58px}.rd input[type=checkbox]{width:auto;accent-color:var(--riso)}
+.rd input:focus-visible,.rd select:focus-visible,.rd textarea:focus-visible,.rd button:focus-visible{outline:2px solid var(--riso);outline-offset:2px}
+.sb-custom{display:grid;gap:10px}
+.sb-row{display:grid;grid-template-columns:minmax(140px,220px) 1fr auto;gap:8px;align-items:start;padding:10px;border-radius:12px;background:var(--card);border:1px solid var(--glass-brd)}
+@media (max-width:700px){.sb-row{grid-template-columns:1fr}}
+.sb-row textarea{min-height:64px;resize:vertical;width:100%;box-sizing:border-box}
+.sb-row input{width:100%;box-sizing:border-box}
+.sb-row .count{font:11px var(--mono);color:var(--ink-soft);margin-top:3px}
+.rd button.primary{background:var(--riso);color:#050A1F;border-color:transparent;font-weight:600}
+.rd button.primary.gold{background:var(--gold);color:#2A1B00}
+.rd button.primary:disabled{opacity:.5;cursor:default}
+.rd button.x{border:1px solid var(--glass-brd);background:var(--card);color:var(--ink-soft);border-radius:99px;width:30px;height:30px;cursor:pointer}
+.rd button.x:hover{color:var(--miss);border-color:var(--miss)}
+.sb-go{align-items:center;margin-top:12px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:10px}
+.card-s{position:relative;padding:14px 14px 12px;border-radius:14px;background:var(--card);border:1px solid var(--glass-brd)}
+.card-s.custom{border-color:color-mix(in srgb,var(--gold) 55%,transparent)}
+.card-s h4{font-family:var(--display);font-weight:400;font-size:22px;margin:0 34px 4px 0}
+.card-s .approach{font-size:13px}
+.card-s .x{position:absolute;top:10px;right:10px}
+.card-s textarea{width:100%;box-sizing:border-box;min-height:80px}
+.card-s input{width:100%;box-sizing:border-box;margin-bottom:6px}
+.axes{display:grid;gap:6px;margin:6px 0}
+.axes div{font-size:12.5px;color:var(--ink-soft)}.axes b{color:var(--ink);font-weight:600}
+.strats .card-s{background:rgba(255,255,255,.035)}
+.strats h4{font-size:20px}
+.mat .mine{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:99px;font:600 10px/1.3 var(--mono);letter-spacing:.06em;
+  text-transform:uppercase;color:#2A1B00;background:var(--gold);vertical-align:middle}
+/* ---------- run detail (click a mat or a journal row) ---------- */
+.mat.clickable,.entry.clickable{cursor:pointer}
+.tries{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 0}
+.tries button{font:500 11px/1 var(--mono);padding:5px 8px;border-radius:99px;border:1px solid var(--glass-brd);background:var(--card);color:var(--ink-soft);cursor:pointer}
+.tries button.ok{color:#04220F;background:var(--hit);border-color:transparent}
+.tries button.bad{color:var(--miss);border-color:color-mix(in srgb,var(--miss) 45%,transparent)}
+.tries button.run{color:var(--riso);border-color:color-mix(in srgb,var(--riso) 55%,transparent)}
+.mat .open-hint{position:relative;z-index:1;margin:6px 0 0;font:500 11px/1 var(--mono);letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-soft);opacity:.75}
+.mat:hover .open-hint{color:var(--riso);opacity:1}
+.rd-veil{position:fixed;inset:0;z-index:60;background:rgba(3,5,12,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 16px}
+.rd-veil[hidden]{display:none}
+.rd{position:relative;width:min(1180px,100%);background:rgba(10,15,34,.96);border:1px solid var(--glass-brd-lit);
+  border-radius:var(--r);box-shadow:var(--glass-hi),0 40px 90px -30px #000;color:var(--ink);padding:22px 24px 26px}
+.rd-close{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:99px;border:1px solid var(--glass-brd);
+  background:var(--card);color:var(--ink);font-size:18px;cursor:pointer}
+.rd-close:hover{border-color:var(--glass-brd-lit)}
+.rd h2{font-family:var(--display);font-weight:400;font-size:34px;margin:0 44px 2px 0;letter-spacing:-.01em}
+.rd .sub{color:var(--ink-soft);font-size:13px;margin:0 0 10px}
+.rd .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.rd .chip{font:500 11px/1 var(--mono);padding:5px 9px;border-radius:99px;border:1px solid var(--glass-brd);color:var(--ink-soft);background:var(--card)}
+.rd .chip.ok{color:#04220F;background:var(--hit);border-color:transparent}
+.rd .chip.bad{color:#2A0710;background:var(--miss);border-color:transparent}
+.rd .chip.gold{color:#2A1B00;background:var(--gold);border-color:transparent}
+.rd .banner{margin:8px 0;padding:8px 12px;border-radius:10px;border:1px solid color-mix(in srgb,var(--gold) 55%,transparent);
+  background:color-mix(in srgb,var(--gold) 12%,transparent);color:var(--gold);font-size:12.5px}
+.rd .approach{font-size:14px;line-height:1.5;color:var(--ink);margin:6px 0}
+.rd dl.choices{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;margin:6px 0 0;font-size:12.5px}
+.rd dl.choices dt{color:var(--ink-soft)}.rd dl.choices dd{margin:0}
+.rd-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px;margin-top:14px}
+@media (max-width:900px){.rd-grid{grid-template-columns:1fr}}
+.rd-player{position:relative;border-radius:12px;overflow:hidden;background:var(--bp);border:1px solid var(--glass-brd);aspect-ratio:4/3}
+.rd-player video,.rd-player img{display:block;width:100%;height:100%;object-fit:contain;background:var(--bp)}
+.rd-player .state{position:absolute;left:10px;bottom:10px;padding:4px 10px;border-radius:99px;font:500 11px/1.2 var(--mono);
+  background:rgba(5,7,15,.8);border:1px solid var(--glass-brd);color:var(--ink)}
+.rd-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px}
+.rd-tabs button{font:500 12px/1 var(--body);padding:7px 12px;border-radius:99px;border:1px solid var(--glass-brd);background:var(--card);color:var(--ink);cursor:pointer}
+.rd-tabs button[aria-pressed="true"]{background:var(--riso);color:#050A1F;border-color:transparent}
+.rd-tabs button.ok::after{content:" ✓";color:var(--hit)}.rd-tabs button.bad::after{content:" ✗";color:var(--miss)}
+.rd-tabs button[aria-pressed="true"].ok::after,.rd-tabs button[aria-pressed="true"].bad::after{color:#050A1F}
+.rd-metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin:10px 0}
+.rd-metrics div{padding:8px 10px;border-radius:10px;background:var(--card);border:1px solid var(--glass-brd)}
+.rd-metrics b{display:block;font:600 16px/1.2 var(--mono);color:var(--ink)}
+.rd-metrics span{font-size:11px;color:var(--ink-soft)}
+.rd-frames{display:flex;gap:6px;margin:8px 0;overflow-x:auto}
+.rd-frames img{width:120px;border-radius:8px;border:1px solid var(--glass-brd);cursor:pointer}
+.rd h3{font-family:var(--display);font-weight:400;font-size:21px;margin:16px 0 6px}
+.rd pre{margin:0;padding:12px;border-radius:10px;background:#040713;border:1px solid var(--glass-brd);color:#DCE3FF;
+  font:12px/1.5 var(--mono);white-space:pre;overflow:auto;max-height:420px}
+.rd pre.wrap{white-space:pre-wrap}
+.rd .err{color:var(--miss);white-space:pre-wrap;font:12px/1.45 var(--mono);margin:6px 0}
+.rd details{margin:8px 0}.rd summary{cursor:pointer;color:var(--riso);font-size:13px}
+.rd .row-actions{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}
+.rd .row-actions a,.rd .row-actions button{font:500 12px/1 var(--body);padding:7px 12px;border-radius:99px;border:1px solid var(--glass-brd);
+  background:var(--card);color:var(--ink);cursor:pointer;text-decoration:none}
+.rd .row-actions a:hover,.rd .row-actions button:hover{border-color:var(--glass-brd-lit)}
+.rd table.calls{width:100%;border-collapse:collapse;font:12px/1.35 var(--mono)}
+.rd table.calls td,.rd table.calls th{padding:5px 8px;border-bottom:1px solid var(--glass-brd);text-align:left;vertical-align:top}
+.rd table.calls th{color:var(--ink-soft);font-weight:500}
+.rd table.calls tr.seek{cursor:pointer}.rd table.calls tr.seek:hover td{background:var(--wash)}
+.rd table.calls tr.now td{background:color-mix(in srgb,var(--riso) 22%,transparent)}
+.rd table.calls tr.bad td{color:var(--miss)}
+.rd .calls-wrap{max-height:360px;overflow:auto;border-radius:10px;border:1px solid var(--glass-brd)}
+.rd .score-card{padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--glass-brd)}
+.rd .score-card .big{font:600 30px/1 var(--mono)}
+.rd .note{color:var(--ink-soft);font-size:12.5px;margin:6px 0}
 </style>
 </head>
 <body>
 <div class="gate" id="gate">
   <div class="gate-glow" aria-hidden="true"></div>
+  <div class="halftone a" aria-hidden="true"></div>
+  <div class="halftone b" aria-hidden="true"></div>
   <div class="shoji left" aria-hidden="true"></div>
   <div class="shoji right" aria-hidden="true"></div>
-  <div class="petals" id="petals" aria-hidden="true"></div>
   <div class="gate-inner">
     <p class="gate-kicker">Robot strategy training</p>
     <h1 class="gate-title">Robo<br>Dojo</h1>
@@ -372,11 +523,20 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
     </div>
     <div class="controls">
       <span class="round" id="roundLabel">Round 0</span>
-      <div class="seg" role="group" aria-label="Playback speed">
+      <form class="launch live-only" id="launchForm" autocomplete="off">
+        <label>Race <select id="fRace" aria-label="Race to watch"><option value="">latest</option></select></label>
+        <label>Task <select id="fTask" aria-label="Task"></select></label>
+        <label>Agents <input id="fAgents" type="number" min="1" max="6" value="4" aria-label="Agents"></label>
+        <label>Seeds <input id="fSeeds" value="0" size="5" aria-label="Seeds, e.g. 0-2"></label>
+        <label>Tries <input id="fTries" type="number" min="1" max="5" value="3" aria-label="Tries per seed"></label>
+        <label>Run on <select id="fBackend" aria-label="Where racers run"><option value="local">Local sim</option><option value="qm">QM sandboxes</option></select></label>
+        <label>Label <input id="fLabel" value="" size="7" placeholder="cold" aria-label="Race label"></label>
+      </form>
+      <div class="seg demo-only" role="group" aria-label="Playback speed">
         <button type="button" data-speed="1" aria-pressed="true">1×</button>
         <button type="button" data-speed="3" aria-pressed="false">3×</button>
       </div>
-      <button type="button" class="ghost" id="resetBtn">Reset dojo</button>
+      <button type="button" class="ghost demo-only" id="resetBtn">Reset dojo</button>
       <button type="button" class="primary" id="startBtn">Start sparring match</button>
     </div>
   </header>
@@ -395,6 +555,7 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
       <div class="card ledger">
         <h3>Training journal</h3>
         <div class="filter" id="journalFilter"></div>
+        <details class="ctx live-only" id="ctxBox" hidden><summary id="ctxSum">Recalled before the race</summary><pre id="ctxText"></pre></details>
         <div class="journal" id="journal"><p class="empty">No attempts yet. Start a sparring match and every hit and miss is recorded here, with the reason.</p></div>
       </div>
     </aside>
@@ -404,6 +565,7 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="true" aria-controls="panelScroll" id="tabScroll">The scroll</button>
       <button role="tab" aria-selected="false" aria-controls="panelBelts" id="tabBelts">Belt ranks</button>
+      <button role="tab" aria-selected="false" aria-controls="panelStrats" id="tabStrats" class="live-only">Strategies</button>
     </div>
     <div class="tabpanel" role="tabpanel" id="panelScroll" aria-labelledby="tabScroll">
       <div class="scroll" id="scroll"><p class="empty">The scroll is empty. Win a sparring match and the proven techniques get written here as a readable skill.</p></div>
@@ -411,10 +573,92 @@ td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-righ
     <div class="tabpanel" role="tabpanel" id="panelBelts" aria-labelledby="tabBelts" hidden>
       <div class="belts" id="belts"></div>
     </div>
+    <div class="tabpanel live-only" role="tabpanel" id="panelStrats" aria-labelledby="tabStrats" hidden>
+      <div class="strats" id="strats"><p class="empty">No plan yet. Press Start race to draft strategies.</p></div>
+    </div>
   </section>
 </div>
 
+<div class="rd-veil" id="sbVeil" hidden>
+  <div class="rd sb" role="dialog" aria-modal="true" aria-labelledby="sbTitle">
+    <button type="button" class="rd-close" id="sbClose" aria-label="Close strategy board">×</button>
+    <h2 id="sbTitle">Strategy board</h2>
+    <p class="sub">Add your own ideas. The planner fills the rest. Review, then fight.</p>
+    <div class="sb-setup">
+      <label>Task <select id="sbTask" aria-label="Task"></select></label>
+      <label>Racers <input id="sbAgents" type="number" min="1" max="6" value="4" aria-label="Racers"></label>
+      <label>Seeds <input id="sbSeeds" value="0" size="5" aria-label="Seeds"></label>
+      <label>Tries <input id="sbTries" type="number" min="1" max="5" value="3" aria-label="Tries per seed"></label>
+      <label>Run on <select id="sbBackend" aria-label="Where racers run"><option value="local">Local sim</option><option value="qm">QM sandboxes</option></select></label>
+      <label>Label <input id="sbLabel" size="8" placeholder="warm" aria-label="Race label"></label>
+      <label class="chk"><input id="sbMemory" type="checkbox" checked> Use memory</label>
+    </div>
+    <h3>Your strategies</h3>
+    <div id="sbCustom" class="sb-custom"></div>
+    <div class="row-actions"><button type="button" id="sbAdd">+ Add your strategy</button></div>
+    <div class="row-actions sb-go">
+      <button type="button" id="sbPropose" class="primary">Propose plan</button>
+      <span class="note" id="sbState"></span>
+    </div>
+    <div id="sbPlan"></div>
+    <div class="row-actions sb-go" id="sbFightRow" hidden>
+      <button type="button" id="sbFight" class="primary gold">Fight</button>
+      <span class="note" id="sbFightNote"></span>
+    </div>
+  </div>
+</div>
+
+<div class="rd-veil" id="rdVeil" hidden>
+  <div class="rd" role="dialog" aria-modal="true" aria-labelledby="rdTitle">
+    <button type="button" class="rd-close" id="rdClose" aria-label="Close run detail">×</button>
+    <div id="rdBody"></div>
+  </div>
+</div>
+
 <script>
+/* Live mode (default) reads the real race: serve.py APIs over runs/ and races/.
+   ?demo=1 runs the original offline simulation instead. */
+const DEMO=new URLSearchParams(location.search).has('demo');
+document.body.classList.add(DEMO?'demo':'live');
+/* ---------- sponsors ----------
+   Icons are each sponsor's own mark, saved under ui/sponsors/ so the page
+   makes no external requests. QM and GBrain fall back to a monogram tile
+   because no official icon source could be verified; give them an `icon`
+   path here once their real mark is to hand. */
+const SPONSORS=[
+  {name:'Anthropic', role:'Claude agents',     icon:'sponsors/anthropic.png'},
+  {name:'QM',        role:'Sandboxes',         mark:'QM'},
+  {name:'Memorable', role:'Training journal',  icon:'sponsors/memorable.png'},
+  {name:'GBrain',    role:'The scroll',        mark:'G'},
+  {name:'MuJoCo',    role:'Physics',           icon:'sponsors/mujoco.png'},
+];
+
+/* ---------- the gate ---------- */
+const gate=document.getElementById('gate');
+document.getElementById('sponsorList').innerHTML=SPONSORS.map(s=>{
+  const badge=s.icon
+    ? `<span class="spicon"><img src="${s.icon}" alt="" width="40" height="40" loading="lazy"></span>`
+    : `<span class="spicon mark">${s.mark||s.name[0]}</span>`;
+  return `<li>${badge}<b>${s.name}</b><span class="srole">${s.role}</span></li>`;
+}).join('');
+
+
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function openGate(){
+  if(gate.classList.contains('open'))return;
+  gate.classList.add('open');
+  setTimeout(()=>{gate.hidden=true;document.getElementById('startBtn').focus({preventScroll:true})},reduce?0:1600);
+}
+document.getElementById('enterBtn').addEventListener('click',openGate);
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!gate.hidden)openGate()});
+if(new URLSearchParams(location.search).has('nogate')){gate.classList.add('open');gate.hidden=true}
+
+</script>
+
+<script>
+/* ================= demo engine (?demo=1): simulated sparring ================= */
+(function demoEngine(){
+if(!DEMO)return;
 const STRATS=[
   {id:'place',name:'Place style',desc:'Carry it over the bin and set it down',time:[9,2]},
   {id:'drop', name:'Drop style', desc:'Hover over the rim and let go',time:[6,1.5]},
@@ -446,7 +690,6 @@ const TRIALS=5, F=160;
 let round=0, speed=1, running=false, records=[], wins={}, prevScroll=new Set(), scrollVersion=0, journalFilter='all';
 STRATS.forEach(s=>wins[s.id]=0);
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-
 /* ---------- build mats ---------- */
 const matsEl=document.getElementById('mats');
 const mats={};
@@ -701,43 +944,6 @@ function renderBelts(){
   }).join('');
 }
 
-/* ---------- sponsors ----------
-   TODO confirm this list and the wording before the demo. These are the
-   tools the repo actually names (ui/README.md and CLAUDE.md); swap in the
-   real sponsor roster if it differs. Wordmarks are set in type on purpose,
-   so no logo assets are needed. */
-const SPONSORS=[
-  {name:'Anthropic', role:'Claude agents'},
-  {name:'QM',        role:'Sandboxes'},
-  {name:'Memorable', role:'Training journal'},
-  {name:'GBrain',    role:'The scroll'},
-  {name:'MuJoCo',    role:'Physics'},
-];
-
-/* ---------- the gate ---------- */
-const gate=document.getElementById('gate');
-document.getElementById('sponsorList').innerHTML=
-  SPONSORS.map(s=>`<li><b>${s.name}</b><span>${s.role}</span></li>`).join('');
-
-if(!reduce){
-  const petals=document.getElementById('petals');
-  petals.innerHTML=[...Array(14)].map((_,i)=>{
-    const dur=9+Math.random()*9, delay=-Math.random()*dur, left=Math.random()*100,
-      dx=(Math.random()*2-1)*140, size=7+Math.random()*7;
-    return `<span class="petal" style="left:${left}%;width:${size}px;height:${size}px;`+
-      `--dx:${dx.toFixed(0)}px;animation-duration:${dur.toFixed(1)}s;animation-delay:${delay.toFixed(1)}s"></span>`;
-  }).join('');
-}
-
-function openGate(){
-  if(gate.classList.contains('open'))return;
-  gate.classList.add('open');
-  setTimeout(()=>{gate.hidden=true;startBtn.focus({preventScroll:true})},reduce?0:1600);
-}
-document.getElementById('enterBtn').addEventListener('click',openGate);
-addEventListener('keydown',e=>{if(e.key==='Escape'&&!gate.hidden)openGate()});
-if(new URLSearchParams(location.search).has('nogate')){gate.classList.add('open');gate.hidden=true}
-
 /* ---------- swapping a mat's blueprint for a real sim ----------
    Each mat's preview lives in a .screen that a recorded attempt can take
    over. media matches result.json["media"] from the web artifact contract
@@ -780,6 +986,599 @@ tabs.forEach(([t,p])=>document.getElementById(t).addEventListener('click',()=>{
   tabs.forEach(([t2,p2])=>{document.getElementById(t2).setAttribute('aria-selected',t2===t);document.getElementById(p2).hidden=p2!==p});
 }));
 renderFilter();renderScore();renderBelts();Object.values(mats).forEach(updateMat);
+})();
+</script>
+<script>
+/* ================= live engine (default): the real race =================
+   Inputs  : Start -> POST /api/race {task, agents, seeds, tries, label}  (serve.py spawns run_race.py)
+   Outputs : GET /api/races, /api/races/<id> (plan, runs, leaderboard, close, context),
+             /api/runs/<run_id>/events, /api/brain (GBrain SKILL.md), /api/memory (Memorable episodes).
+   Media   : /<run_id>/attempt_<k>/live.jpg while running, then attempt.mp4 or key frames. */
+(function liveEngine(){
+if(DEMO)return;
+const $=id=>document.getElementById(id);
+const PAL=['place','drop','toss','push'];
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=(v,d=1)=>v==null||isNaN(v)?'–':(+v).toFixed(d);
+async function getJSON(u,opt){const r=await fetch(u,{cache:'no-store',...opt});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||`${r.status} ${u}`);return j}
+
+const startBtn=$('startBtn'), roundLabel=$('roundLabel'), verdict=$('verdict'), scoreBody=$('scoreBody'),
+  journal=$('journal'), scroll=$('scroll'), belts=$('belts'), matsEl=$('mats'), fRace=$('fRace');
+$('tabBelts').textContent='Race history';
+document.querySelector('thead tr').innerHTML='<th>Racer</th><th class="num">Solved</th><th class="num">Avg time</th><th class="num">Collisions</th><th class="num">Score</th>';
+startBtn.textContent='Start race';
+matsEl.innerHTML='<p class="empty">No race yet. Press Start race.</p>';
+
+let backend='local', qm=null;
+let raceId=null, pinned=false, launchId=null, data=null, mats={}, agentKey='', filter='all', prevScroll=null, events={}, frameTick=0;
+
+/* ---------- inputs ---------- */
+getJSON('/api/tasks').then(j=>{$('fTask').innerHTML=j.tasks.map(t=>`<option value="${esc(t.id)}" title="${esc(t.text)}">${esc(t.id)}</option>`).join('')}).catch(()=>{});
+fRace.addEventListener('change',()=>{pinned=!!fRace.value;raceId=fRace.value||raceId;agentKey='';qm=null;
+  if(raceId)getJSON(`/api/races/${encodeURIComponent(raceId)}/qm`).then(j=>{qm=j}).catch(()=>{});tick()});
+$('launchForm').addEventListener('submit',e=>{e.preventDefault();openBoard()});
+startBtn.addEventListener('click',()=>openBoard());
+async function launch(body){
+  startBtn.disabled=true;startBtn.textContent='Starting…';verdict.textContent='';
+  const j=await getJSON('/api/race',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .catch(err=>{startBtn.disabled=false;startBtn.textContent='Start race';throw err});
+  launchId=j.launch_id;pinned=false;raceId=null;agentKey='';backend=j.backend||'local';qm=null;fRace.value='';
+  verdict.textContent=`${j.params.agents} racers on ${j.params.task}${backend==='qm'?' (QM)':''}. ${body.plan_id?'Racing…':'Planning…'}`;
+  return j;
+}
+
+/* ---------- strategy board: your strategies -> planner preview -> review cards -> fight ---------- */
+const sbVeil=$('sbVeil');
+const sb={custom:[],planId:null,plan:null,kept:[],timer:null};
+function sbAgents(){return Math.max(1,Math.min(6,+$('sbAgents').value||4))}
+function openBoard(){
+  if(launchId)return;
+  $('sbTask').innerHTML=$('fTask').innerHTML;$('sbTask').value=$('fTask').value;
+  $('sbAgents').value=$('fAgents').value||4;$('sbSeeds').value=$('fSeeds').value||'0';$('sbTries').value=$('fTries').value||3;
+  $('sbBackend').value=$('fBackend').value;$('sbLabel').value=$('fLabel').value;
+  renderCustom();renderPlan();sbVeil.hidden=false;document.body.style.overflow='hidden';
+}
+function closeBoard(){if(sb.timer)clearTimeout(sb.timer);sb.timer=null;sbVeil.hidden=true;document.body.style.overflow=''}
+$('sbClose').addEventListener('click',closeBoard);
+sbVeil.addEventListener('click',e=>{if(e.target===sbVeil)closeBoard()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!sbVeil.hidden)closeBoard()});
+function invalidatePlan(){if(sb.plan||sb.planId){sb.plan=null;sb.planId=null;sb.kept=[];renderPlan()}}
+['sbTask','sbAgents','sbMemory'].forEach(id=>$(id).addEventListener('change',()=>{invalidatePlan();renderCustom()}));
+function renderCustom(){
+  const box=$('sbCustom'), n=sbAgents();
+  box.innerHTML=sb.custom.length?sb.custom.map((c,i)=>`<div class="sb-row" data-i="${i}">
+      <div><input data-f="name" maxlength="60" placeholder="Name, e.g. Sweep" value="${esc(c.name)}" aria-label="Strategy name"></div>
+      <div><textarea data-f="approach" maxlength="1000" placeholder="e.g. Push the can off the table edge into the bin." aria-label="Approach">${esc(c.approach)}</textarea><div class="count">${c.approach.length}/1000</div></div>
+      <button type="button" class="x" data-act="del" aria-label="Remove ${esc(c.name||'strategy')}">×</button></div>`).join('')
+    :'<p class="note">None yet. The planner picks all racers.</p>';
+  $('sbAdd').disabled=sb.custom.length>=n;
+  $('sbAdd').textContent=sb.custom.length>=n?`All ${n} racers are yours`:'+ Add your strategy';
+  box.querySelectorAll('.sb-row').forEach(row=>{const i=+row.dataset.i;
+    row.querySelectorAll('[data-f]').forEach(inp=>inp.addEventListener('input',()=>{sb.custom[i][inp.dataset.f]=inp.value;
+      if(inp.dataset.f==='approach')row.querySelector('.count').textContent=`${inp.value.length}/1000`;invalidatePlan()}));
+    row.querySelector('[data-act="del"]').addEventListener('click',()=>{sb.custom.splice(i,1);invalidatePlan();renderCustom()})});
+}
+$('sbAdd').addEventListener('click',()=>{if(sb.custom.length>=sbAgents())return;sb.custom.push({name:'',approach:''});invalidatePlan();renderCustom();
+  const rows=$('sbCustom').querySelectorAll('.sb-row input');if(rows.length)rows[rows.length-1].focus()});
+function firstSeed(){const m=($('sbSeeds').value||'0').match(/\d+/);return m?+m[0]:0}
+$('sbPropose').addEventListener('click',async()=>{
+  const custom=sb.custom.filter(c=>c.approach.trim()).map(c=>({name:c.name.trim(),approach:c.approach.trim()}));
+  const body={task:$('sbTask').value||'can_to_bin',agents:sbAgents(),seed:firstSeed(),memory:$('sbMemory').checked?'tracker':'none',custom};
+  $('sbPropose').disabled=true;$('sbState').textContent='Sending to the planner…';sb.plan=null;sb.kept=[];renderPlan();
+  try{const j=await getJSON('/api/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    sb.planId=j.plan_id;$('sbState').textContent=j.llm?'Planning… (about a minute)':'Building plan…';
+    pollPlan();
+  }catch(err){$('sbState').textContent=`Could not plan: ${err.message}`;$('sbPropose').disabled=false}
+});
+function pollPlan(){
+  const id=sb.planId;if(!id)return;
+  getJSON(`/api/plan/${encodeURIComponent(id)}`).then(j=>{
+    if(sb.planId!==id)return;
+    if(j.state==='pending'){sb.timer=setTimeout(pollPlan,1500);return}
+    $('sbPropose').disabled=false;
+    if(j.state==='failed'){$('sbState').textContent=`Planner failed: ${j.error||'unknown error'}`;return}
+    sb.plan=j.plan;sb.kept=(j.plan.strategies||[]).map(x=>({...x}));$('sbState').textContent='Plan ready.';renderPlan();
+  }).catch(()=>{sb.timer=setTimeout(pollPlan,3000)});
+}
+function modeChip(m){return m?`<span class="chip${m==='custom'?' gold':''}">${m==='custom'?'your strategy':esc(m)}</span>`:''}
+function axesBlock(plan){
+  const ax=plan.axes||[];
+  return `${plan.coverage_rationale?`<p class="approach">${esc(plan.coverage_rationale)}</p>`:''}
+    ${ax.length?`<div class="axes">${ax.map(a=>`<div><b>${esc(a.name)}</b>: ${esc((a.options||[]).join(' / '))}${a.why_it_matters?` <span>(${esc(a.why_it_matters)})</span>`:''}</div>`).join('')}</div>`:''}
+    ${(plan.warnings||[]).map(w=>`<div class="banner">${esc(w)}</div>`).join('')}
+    <p class="note">${plan.model?esc(plan.model):'No planner call'}${plan.used_memory?' · used memory':''}</p>`;
+}
+function renderPlan(){
+  const box=$('sbPlan');
+  $('sbFightRow').hidden=!sb.plan;
+  if(!sb.plan){box.innerHTML='';return}
+  box.innerHTML=`<h3>Plan</h3>${axesBlock(sb.plan)}<div class="cards">${sb.kept.map((c,i)=>`<div class="card-s${c.mode==='custom'?' custom':''}" data-i="${i}">
+      <button type="button" class="x" data-act="drop" aria-label="Remove ${esc(c.name)} from the race">×</button>
+      ${c.mode==='custom'?`<input data-f="name" maxlength="60" value="${esc(c.name)}" aria-label="Name"><textarea data-f="approach" maxlength="1000" aria-label="Approach">${esc(c.approach)}</textarea>`
+        :`<h4>${esc(c.name)}</h4>`}
+      <div class="chips">${modeChip(c.mode)}<span class="chip">${esc(c.agent_id)}</span></div>
+      ${c.mode==='custom'?'':stratCard(c)}</div>`).join('')}</div>`;
+  box.querySelectorAll('.card-s').forEach(el=>{const i=+el.dataset.i;
+    el.querySelector('[data-act="drop"]').addEventListener('click',()=>{sb.kept.splice(i,1);renderPlan()});
+    el.querySelectorAll('[data-f]').forEach(inp=>inp.addEventListener('input',()=>{sb.kept[i][inp.dataset.f]=inp.value}))});
+  const seeds=($('sbSeeds').value||'0').trim();
+  $('sbFight').disabled=!sb.kept.length;
+  $('sbFightNote').textContent=sb.kept.length?`${sb.kept.length} racers · seeds ${seeds} · ${$('sbTries').value} tries · ${$('sbBackend').value==='qm'?'QM':'local'}`:'Keep at least one.';
+}
+$('sbFight').addEventListener('click',async()=>{
+  if(!sb.plan||!sb.kept.length)return;
+  const body={task:$('sbTask').value||'can_to_bin',agents:sb.kept.length,seeds:($('sbSeeds').value||'0').trim(),tries:+$('sbTries').value||3,
+    label:$('sbLabel').value.trim(),backend:$('sbBackend').value,memory:$('sbMemory').checked?'tracker':'none',plan_id:sb.planId,
+    strategies:sb.kept.map(c=>c.mode==='custom'?{agent_id:c.agent_id,name:(c.name||'').trim(),approach:(c.approach||'').trim()}:{agent_id:c.agent_id})};
+  $('sbFight').disabled=true;$('sbFightNote').textContent='Starting the race…';
+  try{await launch(body);
+    ['fTask','fSeeds','fTries','fBackend','fLabel'].forEach(k=>{$(k).value=$('sb'+k.slice(1)).value});$('fAgents').value=sb.kept.length;
+    sb.plan=null;sb.planId=null;sb.kept=[];sb.custom=[];closeBoard();
+  }catch(err){$('sbFightNote').textContent=`Could not start: ${err.message}`;$('sbFight').disabled=false}
+});
+async function pollLaunch(){
+  if(!launchId)return;
+  try{const st=await getJSON(`/api/launch/${launchId}`);
+    if(st.race_id&&!pinned)raceId=st.race_id;
+    if(st.error)verdict.textContent=`QM launch failed: ${st.error}`;
+    else if(st.backend==='qm'&&st.result)verdict.textContent=qmMessage(st.result);
+    else if(!st.race_id)verdict.textContent='Planning…';
+    if(!st.running){launchId=null;startBtn.disabled=false;startBtn.textContent='Start next race';
+      if(st.exit_code&&!st.race_id)verdict.textContent=`Race exited (${st.exit_code}): ${st.log_tail.slice(-3).join(' ')}`}
+  }catch{launchId=null;startBtn.disabled=false;startBtn.textContent='Start race'}
+}
+
+/* ---------- mats: one per racer (plan strategy) ---------- */
+function agentsOf(d){
+  const plan=(d.plan&&d.plan.strategies)||[];
+  const list=plan.map(s=>({id:s.agent_id,name:s.name,desc:s.approach||'',mode:s.mode||'explore'}));
+  d.runs.forEach(r=>{const a=(r.race||{}).agent_id;if(a&&!list.find(x=>x.id===a))list.push({id:a,name:(r.race||{}).strategy_name||a,desc:r.strategy||'',mode:''})});
+  return list;
+}
+function gist(t,n=10){const w=String(t||'').split(/(?<=[.;:])\s/)[0].replace(/[.;:,]+$/,'').split(/\s+/).filter(Boolean);
+  return w.length>n?w.slice(0,n).join(' ')+'…':w.join(' ')}
+function buildMats(agents){
+  mats={};matsEl.innerHTML='';
+  agents.forEach((a,i)=>{
+    const el=document.createElement('article');el.className='mat clickable';el.dataset.agent=a.id;
+    el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',`Open run detail for ${a.name}`);
+    const pal=PAL[i%PAL.length];el.style.setProperty('--s',`var(--s-${pal})`);
+    el.innerHTML=`<span class="crown">Race winner</span>
+    <div class="mat-head"><h2>${esc(a.name)}${a.mode==='custom'?'<span class="mine">your strategy</span>':''}</h2><span class="belt"><i style="background:var(--s-${pal})"></i><span>${esc(a.id)}${a.mode?' · '+esc(a.mode):''}</span></span></div>
+    <p class="desc" title="${esc(a.desc)}">${esc(gist(a.desc))}</p>
+    <div class="screen"><span class="screen-tag">Waiting</span><div class="idle">waiting for first attempt</div></div>
+    <p class="caption">Waiting on the mat</p>
+    <div class="stats"><span><b data-in>0/0</b>solved</span><span><b data-time>–</b>s avg</span><span><b data-tries>0</b>tries</span></div>
+    <div class="tries" data-tries-strip></div>
+    <p class="open-hint">Open run ›</p>`;
+    matsEl.appendChild(el);
+    mats[a.id]={a,pal,el,screen:el.querySelector('.screen'),tag:el.querySelector('.screen-tag'),caption:el.querySelector('.caption'),
+      in:el.querySelector('[data-in]'),time:el.querySelector('[data-time]'),tries:el.querySelector('[data-tries]'),strip:el.querySelector('[data-tries-strip]'),src:null,frames:null};
+  });
+}
+function mediaOf(run){
+  if(run.live)return {kind:'img',src:`/${run.run_id}/${run.live}?t=${Date.now()}`,tag:`Live sim · try ${run.current_attempt}`,live:true};
+  const last=run.attempts[run.attempts.length-1];if(!last||!last.media)return null;
+  const base=`/${run.run_id}/attempt_${last.k}/`, m=last.media;
+  if(m.video)return {kind:'video',src:base+m.video,poster:m.poster?base+m.poster:'',tag:`Replay · try ${last.k}`};
+  if(m.keyframes&&m.keyframes.length)return {kind:'frames',frames:m.keyframes.map(f=>base+f),tag:`Key frames · try ${last.k}`};
+  if(m.poster)return {kind:'img',src:base+m.poster,tag:`Final frame · try ${last.k}`};
+  return null;
+}
+function showMedia(m,md){
+  if(!md)return;
+  m.tag.textContent=md.tag;m.screen.classList.toggle('live',!!md.live);
+  const key=md.kind==='frames'?md.frames.join('|'):md.kind==='img'&&md.live?'live':md.src;
+  if(m.src===key&&md.kind!=='img')return;
+  if(md.kind==='img'&&md.live&&m.src==='live'){m.screen.querySelector('img').src=md.src;return}
+  m.src=key;m.frames=null;
+  [...m.screen.children].forEach(c=>{if(c!==m.tag)c.remove()});
+  if(md.kind==='video'){const v=document.createElement('video');v.src=md.src;if(md.poster)v.poster=md.poster;
+    v.autoplay=v.muted=v.loop=v.playsInline=true;v.setAttribute('playsinline','');m.screen.appendChild(v)}
+  else{const img=document.createElement('img');img.alt=`${m.a.name} sim`;img.src=md.kind==='frames'?md.frames[0]:md.src;
+    if(md.kind==='frames')m.frames=md.frames;m.screen.appendChild(img)}
+}
+setInterval(()=>{frameTick++;Object.values(mats).forEach(m=>{if(m.frames){const img=m.screen.querySelector('img');if(img)img.src=m.frames[frameTick%m.frames.length]}})},800);
+
+const EV={run_started:e=>'Reading the scene',attempt_started:e=>`Try ${e.attempt}: thinking`,
+  model_request:e=>`Try ${e.attempt}: writing code`,model_response:e=>e.error?'Model error':`Try ${e.attempt}: code ready`,
+  code_generated:e=>`Try ${e.attempt}: running in sim`,
+  attempt_finished:e=>{const r=e.result||{};return r.success?`Try ${e.attempt}: in the bin, ${num(r.time_s)} s`:`Try ${e.attempt}: missed`},
+  run_finished:e=>e.status==='solved'?`Solved on try ${e.solved_at}`:'Not solved'};
+async function pollEvents(run){
+  const st=events[run.run_id]||(events[run.run_id]={next:0,last:null});
+  if(st.done)return st.last;
+  try{const j=await getJSON(`/api/runs/${run.run_id}/events?since=${st.next}`);st.next=j.next;
+    const e=j.events.filter(x=>EV[x.type]).pop();if(e)st.last=`Seed ${run.seed} · `+EV[e.type](e);
+    if(j.events.some(x=>x.type==='run_finished'))st.done=true;}catch{}
+  return st.last;
+}
+
+/* ---------- QM workers (backend=qm): shape from qm.launch.qm_status, matched loosely ---------- */
+const isQM=d=>!!(d&&d.launch&&d.launch.backend==='qm');
+function qmWorker(a){
+  if(!isQM(data)||!qm||!qm.available||!qm.workers)return null;
+  const w=Array.isArray(qm.workers)?qm.workers.find(x=>[x.agent_id,x.strategy,x.name].includes(a.id)):qm.workers[a.id];
+  return w?{...w,status:w.status||(w.solved?'solved':w.attempts?`try ${w.attempts}`:'waiting')}:null;
+}
+function qmMessage(launch){const q=launch&&launch.qm;return q&&q.status==='manual'&&q.message?
+  `QM race prepared. Send this to the QM root agent (QM web UI): “${q.message}”. Workers report every attempt to the tracker live.`:''}
+let qmProbed=null;
+async function pollQM(){
+  if(!raceId)return;
+  if(!isQM(data)){qm=null;return}  // local races never show QM state
+  try{qm=await getJSON(`/api/races/${encodeURIComponent(raceId)}/qm`)}catch{qm=null}
+}
+
+/* ---------- scoring (tracker leaderboard, else local) ---------- */
+function localScores(agents,runs){
+  return agents.map(a=>{const rs=runs.filter(r=>(r.race||{}).agent_id===a.id);
+    const ok=rs.filter(r=>r.status==='solved'), att=rs.flatMap(r=>r.attempts), wins=att.filter(x=>x.success);
+    const t=wins.length?wins.reduce((s,x)=>s+(x.time_s||0),0)/wins.length:null;
+    const tries=ok.length?ok.reduce((s,r)=>s+r.solved_at,0)/ok.length:null;
+    return {agent_id:a.id,name:a.name,solved:ok.length,seeds:rs.length,time:t,coll:rs.length?att.reduce((s,x)=>s+(x.collisions||0),0)/rs.length:0,
+      score:rs.length?Math.round(ok.length/rs.length*100-(tries?tries*5:0)):null,tries:att.length}});
+}
+function scores(d,agents){
+  const lb=d.leaderboard&&d.leaderboard.scores;
+  if(lb&&lb.length)return lb.map(s=>({agent_id:s.agent_id,name:(agents.find(a=>a.id===s.agent_id)||{}).name||s.persona||s.agent_id,
+    solved:s.seeds_solved,seeds:s.seeds_target,time:s.mean_time_s,coll:s.collisions_per_seed,score:Math.round(s.score),tries:s.attempts_total,src:'tracker'}));
+  return localScores(agents,d.runs).sort((a,b)=>(b.score??-1e9)-(a.score??-1e9));
+}
+
+/* ---------- render one race ---------- */
+async function render(d){
+  const agents=agentsOf(d), key=agents.map(a=>a.id).join(',');
+  if(!agents.length){matsEl.innerHTML='<p class="empty">Planner is choosing strategies…</p>';return}
+  if(key!==agentKey){agentKey=key;buildMats(agents);renderFilter(agents)}
+  const tr=d.tracker||{}, label=tr.label||(d.race&&d.race.label)||'';
+  const running=d.runs.some(r=>r.status==='running');
+  roundLabel.textContent=`${label?label+' · ':''}${running?'racing':d.close?'closed':d.race?'finished':'starting'}`;
+  const sc=scores(d,agents), winner=(d.close&&d.close.winner&&d.close.winner.agent_id)||(d.leaderboard&&d.leaderboard.winner&&(d.leaderboard.winner.agent_id||d.leaderboard.winner));
+  for(const a of agents){
+    const m=mats[a.id], rs=d.runs.filter(r=>(r.race||{}).agent_id===a.id);
+    const focus=rs.find(r=>r.status==='running')||rs.slice().sort((x,y)=>(y.updated_at||0)-(x.updated_at||0))[0];
+    const s=sc.find(x=>x.agent_id===a.id)||{};
+    m.in.textContent=`${s.solved??0}/${s.seeds??rs.length}`;m.time.textContent=num(s.time);m.tries.textContent=rs.reduce((n,r)=>n+r.attempts.length,0);
+    m.el.classList.toggle('champion',winner===a.id);
+    const w=qmWorker(a), where=isQM(d)?'QM':'Local';
+    m.strip.innerHTML=rs.flatMap(r=>r.attempts.map(x=>`<button type="button" data-run="${esc(r.run_id)}" data-seed="${esc(r.seed)}" data-k="${x.k}" class="${x.success?'ok':'bad'}" title="Seed ${esc(r.seed)}, try ${x.k}: ${x.success?'in the bin':'missed'}">${rs.length>1?`S${esc(r.seed)} `:''}T${x.k} ${x.success?'✓':'✗'}</button>`)
+      .concat(r.current_attempt?[`<button type="button" data-run="${esc(r.run_id)}" data-seed="${esc(r.seed)}" data-k="${r.current_attempt}" class="run">${rs.length>1?`S${esc(r.seed)} `:''}T${r.current_attempt} …</button>`]:[])).join('')
+      +(!rs.length?(d.attempts||[]).filter(t=>t.agent_id===a.id).map(t=>`<button type="button" data-seed="${esc(t.seed)}" data-k="${t.attempt}" class="${t.success?'ok':'bad'}">S${esc(t.seed)} T${t.attempt} ${t.success?'✓':'✗'}</button>`).join(''):'');
+    if(!focus){m.tag.textContent=w?`QM · ${w.status||w.state||'worker'}`:`${where} · waiting`;
+      if(w)m.caption.textContent=`QM sandbox ${w.sandbox||w.container||w.id||''}: ${w.status||w.state||'starting'}`;continue}
+    const md=mediaOf(focus);showMedia(m,md);m.tag.textContent=(w?`QM · ${w.status||w.state||'worker'}`:where)+' · '+(md?md.tag:'starting');
+    const cap=await pollEvents(focus);if(cap)m.caption.textContent=cap;
+    const prev=m.lastDone, done=focus.attempts.length;
+    if(prev!=null&&done>prev){const ok=focus.attempts[done-1].success;m.el.classList.add(ok?'hit':'miss');setTimeout(()=>m.el.classList.remove('hit','miss'),700)}
+    m.lastDone=done;
+  }
+  scoreBody.innerHTML=sc.map(s=>{const pal=(mats[s.agent_id]||{}).pal||'place';return `<tr><td><span class="dot" style="color:var(--s-${pal});background:var(--s-${pal})"></span>${esc(s.name)}</td><td class="num">${s.solved??0}/${s.seeds??0}</td><td class="num">${s.time!=null?num(s.time)+' s':'–'}</td><td class="num">${num(s.coll,1)}</td><td class="num"><b>${s.score??'–'}</b></td></tr>`}).join('');
+  const lines=(d.close&&d.close.lessons&&d.close.lessons.lines)||[];
+  if(d.close&&winner){const w=sc.find(x=>x.agent_id===winner)||{};verdict.innerHTML=`${esc(w.name||winner)} wins · ${w.solved}/${w.seeds} solved${w.time!=null?' · '+num(w.time)+' s':''}`+lines.map(l=>`<span class="lesson">${esc(l)}</span>`).join('')}
+  else if(d.race&&d.race.local_ranking){const b=d.race.local_ranking[0];verdict.textContent=b?`${b.strategy} leads with ${b.solved}/${b.seeds} solved (no tracker, local ranking).`:''}
+  else if(!launchId){const done=d.runs.filter(r=>r.status!=='running').length;
+    verdict.textContent=d.runs.length?`Racing · ${done}/${d.runs.length} done`:qmMessage(d.launch)}
+  renderJournal(d,agents);renderContext(d);renderStrats(d);
+  const hm=!deepLinked&&location.hash.match(/^#detail=([\w.-]+)(?:\/(\d+))?/);   // #detail=agent-2[/<try>]
+  if(hm&&agents.find(a=>a.id===hm[1])){deepLinked=true;openDetail({agent:hm[1],k:hm[2]?+hm[2]:null})}
+}
+let deepLinked=false;
+
+/* ---------- journal: every attempt, with tracker failure modes + memory tags ---------- */
+function renderFilter(agents){
+  const el=$('journalFilter');
+  el.innerHTML=[{id:'all',name:'All'},...agents].map(o=>`<button type="button" data-f="${esc(o.id)}" aria-pressed="${filter===o.id}">${esc(o.name)}</button>`).join('');
+}
+$('journalFilter').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;filter=b.dataset.f;
+  [...$('journalFilter').children].forEach(x=>x.setAttribute('aria-pressed',x===b));if(data)renderJournal(data,agentsOf(data))});
+function reason(r,fm){
+  if(r.success)return `In the bin, ${num(r.time_s)} s${r.collisions?`, ${r.collisions} collisions`:''}`;
+  if(fm)return fm.replace(/_/g,' ')+(r.error?`: ${String(r.error).split('\n')[0].slice(0,120)}`:'');
+  if(r.error)return String(r.error).split('\n')[0].slice(0,140);
+  if(r.dropped)return 'Dropped it on the way';
+  if(r.lifted===false)return 'Never lifted the item';
+  return 'Missed the bin';
+}
+function renderJournal(d,agents){
+  const fms={};(d.attempts||[]).forEach(a=>{fms[`${a.agent_id}|${a.seed}|${a.attempt}`]=a.failure_mode});
+  const rows=[];
+  d.runs.forEach(run=>{const ag=(run.race||{}).agent_id, a=agents.find(x=>x.id===ag)||{name:ag};
+    if(filter!=='all'&&ag!==filter)return;
+    run.attempts.forEach(at=>rows.push({run,ag,a,at,fm:fms[`${ag}|${run.seed}|${at.k}`]}))});
+  // QM workers run in sandboxes: their attempts reach us only through the tracker
+  const seen=new Set(rows.map(r=>`${r.ag}|${r.run.seed}|${r.at.k}`));
+  (d.attempts||[]).forEach(t=>{const key=`${t.agent_id}|${t.seed}|${t.attempt}`;
+    if(seen.has(key)||(filter!=='all'&&t.agent_id!==filter))return;
+    const a=agents.find(x=>x.id===t.agent_id)||{name:t.agent_id};
+    rows.push({run:{seed:t.seed,updated_at:t.recorded_at||t.ts||0,hints:null},ag:t.agent_id,a,at:{...t,k:t.attempt},fm:t.failure_mode})});
+  if(!rows.length){journal.innerHTML='<p class="empty">No attempts yet.</p>';return}
+  rows.sort((x,y)=>(y.run.updated_at||0)-(x.run.updated_at||0)||y.at.k-x.at.k);
+  journal.innerHTML=rows.slice(0,120).map(({run,ag,a,at,fm})=>{
+    const pal=(mats[ag]||{}).pal||'place';
+    const recall=at.k===1&&run.hints&&run.hints.context?'<span class="recall">recalled memory</span>':'';
+    return `<div class="entry clickable ${at.success?'ok':'bad'}" style="--s:var(--s-${pal})" data-agent="${esc(ag)}" data-run="${esc(run.run_id||'')}" data-seed="${esc(run.seed)}" data-k="${esc(at.k)}" tabindex="0" role="button"><span class="mark" aria-label="${at.success?'Hit':'Miss'}">${at.success?'✓':'✗'}</span><div><span class="who">${esc(a.name)}</span><span class="rnd">S${run.seed} T${at.k}</span><br><span class="why">${esc(reason(at,fm))}</span>${recall}</div></div>`;
+  }).join('');
+}
+async function renderContext(d){
+  const box=$('ctxBox');
+  if(!d.context&&!d.memory){box.hidden=true;return}
+  box.hidden=false;
+  const n=d.context?d.context.split('\n').filter(Boolean).length:0;
+  $('ctxSum').textContent=`Recalled before the race${n?` (${n} lines)`:''}`;
+  $('ctxText').textContent=(d.context||'')+(d.memory?`\n\nmemory.json:\n${JSON.stringify(d.memory,null,1).slice(0,3000)}`:'');
+}
+
+/* ---------- the scroll: GBrain skill, markdown ---------- */
+function md(text){
+  text=text.replace(/^---\n[\s\S]*?\n---\n/,'');
+  const out=[];let list=false,code=false,buf=[];
+  const inline=s=>esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+  const close=()=>{if(list){out.push('</ul>');list=false}};
+  for(const line of text.split('\n')){
+    if(line.startsWith('```')){if(code){out.push(`<pre>${esc(buf.join('\n'))}</pre>`);buf=[];code=false}else{close();code=true}continue}
+    if(code){buf.push(line);continue}
+    if(/^<!--.*-->$/.test(line.trim()))continue;
+    let m;
+    if((m=line.match(/^#\s+(.*)/))){close();out.push(`<p class="md-h1">${inline(m[1])}</p>`)}
+    else if((m=line.match(/^#{2,6}\s+(.*)/))){close();out.push(`<p class="md-h2">${inline(m[1])}</p>`)}
+    else if((m=line.match(/^\s*[-*]\s+(.*)/))){if(!list){out.push('<ul>');list=true}out.push(`<li data-l="${esc(m[1])}">${inline(m[1])}</li>`)}
+    else if(line.trim()){close();out.push(`<p class="md-p">${inline(line)}</p>`)}
+  }
+  close();return out.join('');
+}
+async function renderScroll(){
+  try{const j=await getJSON('/api/brain');
+    if(!j.markdown){scroll.innerHTML='<p class="empty">GBrain has no skill yet. Finish a race and it gets distilled here.</p>';return}
+    scroll.innerHTML=`<p class="ver">${esc(j.path)} · updated ${new Date(j.mtime*1000).toLocaleString()}</p>`+md(j.markdown);
+    const now=new Set([...scroll.querySelectorAll('li')].map(li=>li.dataset.l));
+    if(prevScroll)scroll.querySelectorAll('li').forEach(li=>{if(!prevScroll.has(li.dataset.l))li.classList.add('fresh')});
+    prevScroll=now;
+  }catch{}
+}
+
+/* ---------- race history (tracker summaries + local races/) ---------- */
+function renderHistory(list){
+  if(!list.length){belts.innerHTML='<p class="empty">No races yet.</p>';return}
+  belts.innerHTML=list.slice(0,12).map(r=>{const t=r.tracker||{}, s=t.summary||{}, l=r.local||{};
+    const rate=s.solve_rate!=null?Math.round(s.solve_rate*100):null;
+    return `<div class="beltcard"><h4>${esc(t.label||l.label||r.race_id)}</h4>
+      <div class="beltbar" style="background:linear-gradient(90deg,var(--riso) ${rate??0}%,transparent ${rate??0}%)"></div>
+      <p><b>${esc(s.task||t.task||l.task||'')}</b> · ${esc(t.status||(l.closed?'closed':l.done?'finished':'running'))}</p>
+      <p>${rate!=null?`${s.seeds_solved}/${s.seeds_attempted} seeds solved, ${Math.round((s.first_try_rate||0)*100)}% first try`:`${l.agents||'?'} agents`}${s.winner?` · winner ${esc(s.winner)}`:''}</p>
+      <p style="font-family:var(--mono);font-size:10.5px">${esc(r.race_id)}</p></div>`}).join('');
+}
+
+
+/* ---------- strategies panel: the current race's plan ---------- */
+const stratsEl=$('strats');let stratsKey='';
+function renderStrats(d){
+  const plan=d.plan, key=d.race_id+'|'+JSON.stringify((plan&&plan.strategies||[]).map(x=>x.agent_id+x.name));
+  if(key===stratsKey)return;stratsKey=key;
+  if(!plan||!(plan.strategies||[]).length){stratsEl.innerHTML='<p class="empty">No plan yet.</p>';return}
+  stratsEl.innerHTML=`<p class="ver">${esc(d.race_id)}${plan.edited?' · reviewed':''}</p>${axesBlock(plan)}
+    <div class="cards">${plan.strategies.map(c=>`<div class="card-s clickable${c.mode==='custom'?' custom':''}" data-agent="${esc(c.agent_id)}" tabindex="0" role="button" aria-label="Open run detail for ${esc(c.name)}">
+      <h4>${esc(c.name)}</h4><div class="chips">${modeChip(c.mode)}<span class="chip">${esc(c.agent_id)}</span></div>${stratCard(c)}</div>`).join('')}</div>`;
+}
+stratsEl.addEventListener('click',e=>{const c=e.target.closest('.card-s[data-agent]');if(c)openDetail({agent:c.dataset.agent})});
+stratsEl.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('.card-s[data-agent]'))e.target.click()});
+{const tabs=[['tabScroll','panelScroll'],['tabBelts','panelBelts'],['tabStrats','panelStrats']];   // live tab switching
+  tabs.forEach(([t,p])=>$(t).addEventListener('click',()=>tabs.forEach(([t2,p2])=>{$(t2).setAttribute('aria-selected',t2===t);$(p2).hidden=p2!==p})));}
+
+/* ---------- run detail: click a mat or a journal row ---------- */
+const veil=$('rdVeil'), rdBody=$('rdBody');
+let rd=null;   // {agent, runId, seed, k, summary, timer}
+function closeDetail(){if(rd&&rd.timer)clearTimeout(rd.timer);rd=null;veil.hidden=true;rdBody.innerHTML='';document.body.style.overflow=''}
+$('rdClose').addEventListener('click',closeDetail);
+veil.addEventListener('click',e=>{if(e.target===veil)closeDetail()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!veil.hidden)closeDetail()});
+matsEl.addEventListener('click',e=>{const t=e.target.closest('.tries button[data-k]');const m=e.target.closest('.mat[data-agent]');
+  if(t&&m)return openDetail({agent:m.dataset.agent,runId:t.dataset.run,seed:+t.dataset.seed,k:+t.dataset.k});
+  if(m)openDetail({agent:m.dataset.agent})});
+matsEl.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.mat[data-agent]')){e.preventDefault();openDetail({agent:e.target.dataset.agent})}});
+journal.addEventListener('click',e=>{const r=e.target.closest('.entry[data-agent]');if(r)openDetail({agent:r.dataset.agent,runId:r.dataset.run||null,seed:+r.dataset.seed,k:+r.dataset.k})});
+journal.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('.entry[data-agent]'))e.target.click()});
+
+const sfx=v=>v==null?'–':v;
+function stratCard(sc){
+  if(!sc)return '';
+  const ch=sc.choices&&Object.keys(sc.choices).length?`<dl class="choices">${Object.entries(sc.choices).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`:'';
+  const params=sc.starting_parameters&&Object.keys(sc.starting_parameters).length?`<p class="note">Starting parameters: ${esc(Object.entries(sc.starting_parameters).map(([k,v])=>`${k}=${v}`).join(', '))}</p>`:'';
+  return `${sc.approach?`<p class="approach">${esc(sc.approach)}</p>`:''}${ch}${params}${sc.risks?`<p class="note">Risk: ${esc(Array.isArray(sc.risks)?sc.risks.join('; '):sc.risks)}</p>`:''}${sc.builds_on?`<p class="note">Builds on: ${esc(Array.isArray(sc.builds_on)?sc.builds_on.join(', '):sc.builds_on)}</p>`:''}`;
+}
+async function openDetail(o){
+  if(!data)return;
+  if(rd&&rd.timer)clearTimeout(rd.timer);
+  const runs=data.runs.filter(r=>(r.race||{}).agent_id===o.agent).sort((a,b)=>(a.seed||0)-(b.seed||0));
+  let run=o.runId?runs.find(r=>r.run_id===o.runId):null;
+  if(!run&&o.seed!=null&&!isNaN(o.seed))run=runs.find(r=>r.seed===o.seed);
+  if(!run)run=runs.find(r=>r.status==='running')||runs.find(r=>r.status==='solved')||runs[0];
+  rd={agent:o.agent,runId:run?run.run_id:null,seed:run?run.seed:(isNaN(o.seed)?null:o.seed),k:o.k||null,summary:null,timer:null};
+  veil.hidden=false;document.body.style.overflow='hidden';
+  rdBody.innerHTML='<p class="note">Loading run…</p>';
+  if(run){try{rd.summary=await getJSON(`/api/runs/${encodeURIComponent(run.run_id)}`)}catch(err){rd.summary=null}}
+  if(!rd)return;
+  if(!rd.k){const s=rd.summary;rd.k=s&&s.solved_at?s.solved_at:(s&&s.attempts&&s.attempts.length)||1}
+  drawDetail();
+}
+function drawDetail(){
+  if(!rd)return;
+  const d=data, ag=rd.agent, s=rd.summary;
+  const plan=((d.plan&&d.plan.strategies)||[]).find(x=>x.agent_id===ag)||{};
+  const name=plan.name||(s&&s.race&&s.race.strategy_name)||ag;
+  const mode=plan.mode||(s&&s.race&&s.race.mode)||'';
+  const lb=(d.leaderboard&&d.leaderboard.scores)||[]; const row=lb.find(x=>x.agent_id===ag);
+  const rank=row?(row.rank||lb.indexOf(row)+1):null;
+  const winner=(d.close&&d.close.winner&&d.close.winner.agent_id)||(d.leaderboard&&d.leaderboard.winner&&(d.leaderboard.winner.agent_id||d.leaderboard.winner));
+  const runs=d.runs.filter(r=>(r.race||{}).agent_id===ag).sort((a,b)=>(a.seed||0)-(b.seed||0));
+  const trk=(d.attempts||[]).filter(a=>a.agent_id===ag);
+  const hints=(s&&s.hints)||{};
+  const banners=[];
+  if(s&&s.scripted)banners.push('SCRIPTED DEMO, NOT A MODEL');
+  if(hints.example)banners.push('Hint: reference example');
+  if(hints.strategy)banners.push(mode==='custom'?'Hint: your strategy':'Hint: planner strategy');
+  if(hints.context)banners.push('Hint: recalled memory');
+  const status=s?s.status:(trk.some(a=>a.success)?'solved':trk.length?'attempted':'waiting');
+  let h=`<h2 id="rdTitle">${esc(name)}</h2>
+  <p class="sub">${esc(ag)} · race ${esc(d.race_id)}${rd.seed!=null?` · seed ${esc(rd.seed)}`:''}${s&&s.model?` · ${esc(s.model)}`:''}${rd.runId?` · <span style="font-family:var(--mono)">${esc(rd.runId)}</span>`:''}</p>
+  <div class="chips">${mode?`<span class="chip">${esc(mode)}</span>`:''}${mode==='custom'?'<span class="chip gold">your strategy</span>':''}
+    <span class="chip ${status==='solved'?'ok':status==='failed'||status==='error'?'bad':''}">${esc(status)}${s&&s.solved_at?` at try ${s.solved_at}`:''}</span>
+    ${winner===ag?'<span class="chip gold">race winner</span>':''}${rank?`<span class="chip">rank #${rank}</span>`:''}</div>
+  ${banners.map(b=>`<div class="banner">${esc(b)}</div>`).join('')}
+  ${stratCard(plan)}`;
+  if(runs.length>1)h+=`<div class="rd-tabs" data-role="seeds">${runs.map(r=>`<button type="button" data-run="${esc(r.run_id)}" aria-pressed="${r.run_id===rd.runId}" class="${r.status==='solved'?'ok':r.status==='running'?'':'bad'}">Seed ${esc(r.seed)}</button>`).join('')}</div>`;
+  // attempts: local summary, else tracker (QM runs live in sandboxes)
+  const atts=s&&s.attempts&&s.attempts.length?s.attempts.map(a=>({k:a.k,r:a.result||{},code:a.code})):
+    trk.filter(a=>rd.seed==null||a.seed===rd.seed).sort((a,b)=>a.attempt-b.attempt).map(a=>({k:a.attempt,r:a,code:a.code,trk:true}));
+  const cur=atts.find(a=>a.k===rd.k)||atts[atts.length-1];
+  if(cur)rd.k=cur.k;
+  h+=atts.length?`<div class="rd-tabs" data-role="attempts">${atts.map(a=>`<button type="button" data-k="${a.k}" aria-pressed="${a.k===rd.k}" class="${a.r.success?'ok':'bad'}">Try ${a.k}</button>`).join('')}${s&&s.status==='running'?`<button type="button" disabled>Try ${atts.length+1} running…</button>`:''}</div>`
+    :`<p class="note">${s&&s.status==='running'?'Try 1 running…':'No attempts yet.'}</p>`;
+  h+=`<div class="rd-grid"><div>
+      <div class="rd-player" id="rdPlayer"><div class="state">${cur?'Loading video…':'Waiting'}</div></div>
+      <div class="rd-frames" id="rdFrames"></div>
+      <div class="row-actions">${rd.runId?`<a href="/${encodeURIComponent(rd.runId)}/trace.html" target="_blank" rel="noopener">Audit trace ↗</a><a href="/${encodeURIComponent(rd.runId)}/index.html" target="_blank" rel="noopener">Gallery ↗</a>`:''}${cur&&rd.runId?`<a href="/${encodeURIComponent(rd.runId)}/attempt_${cur.k}/" target="_blank" rel="noopener">Files ↗</a>`:''}</div>
+    </div><div>
+      ${scoreCard(row,rank)}
+      ${memoryBlock(hints,d)}
+    </div></div>
+    <div id="rdAttempt"></div>`;
+  rdBody.innerHTML=h;
+  rdBody.querySelectorAll('[data-role="seeds"] button').forEach(b=>b.addEventListener('click',()=>{const r=runs.find(x=>x.run_id===b.dataset.run);openDetail({agent:ag,runId:b.dataset.run,seed:r&&r.seed})}));
+  rdBody.querySelectorAll('[data-role="attempts"] button[data-k]').forEach(b=>b.addEventListener('click',()=>{rd.k=+b.dataset.k;if(rd.timer)clearTimeout(rd.timer);drawDetail()}));
+  const ctxBtn=rdBody.querySelector('[data-act="ctx"]');
+  if(ctxBtn)ctxBtn.addEventListener('click',()=>{const p=rdBody.querySelector('#rdCtx');p.hidden=!p.hidden;ctxBtn.textContent=p.hidden?'Show recall':'Hide recall'});
+  if(cur)drawAttempt(cur,trk.find(a=>a.seed===rd.seed&&a.attempt===cur.k)||(cur.trk?cur.r:null));
+}
+function scoreCard(row,rank){
+  if(!row)return `<div class="score-card"><p class="note">No score yet.</p></div>`;
+  const bd=row.score_breakdown?Object.entries(row.score_breakdown).map(([k,v])=>`${k} ${(+v).toFixed(1)}`).join(' · '):'';
+  const fm=row.failure_modes&&Object.keys(row.failure_modes).length?Object.entries(row.failure_modes).map(([k,v])=>`${k.replace(/_/g,' ')} ×${v}`).join(', '):'none';
+  return `<div class="score-card"><span class="note">Race score${rank?` · rank #${rank}`:''}</span><div class="big">${(+row.score).toFixed(1)}</div>
+    <div class="rd-metrics"><div><b>${row.seeds_solved}/${row.seeds_target}</b><span>seeds solved</span></div>
+      <div><b>${Math.round((row.first_try_rate||0)*100)}%</b><span>first try</span></div>
+      <div><b>${row.mean_tries_to_solve!=null?num(row.mean_tries_to_solve):'–'}</b><span>tries to solve</span></div>
+      <div><b>${row.mean_time_s!=null?num(row.mean_time_s)+' s':'–'}</b><span>mean time</span></div>
+      <div><b>${num(row.collisions_per_seed)}</b><span>collisions / seed</span></div>
+      <div><b>${row.attempts_total}</b><span>attempts</span></div></div>
+    ${bd?`<p class="note">Breakdown: ${esc(bd)}</p>`:''}<p class="note">Failure modes: ${esc(fm)}</p></div>`;
+}
+function memoryBlock(hints,d){
+  if(!hints.context&&!d.context)return '';
+  return `<h3>Memory</h3><p class="note">${hints.context?'Started from GBrain + Memorable recall.':'No recall in this run.'}</p>
+    ${d.context?`<div class="row-actions"><button type="button" data-act="ctx">Show recall</button></div><pre class="wrap" id="rdCtx" hidden>${esc(d.context)}</pre>`:''}`;
+}
+async function drawAttempt(cur,t){
+  const r=cur.r||{}, box=rdBody.querySelector('#rdAttempt'), local=!cur.trk&&rd.runId;
+  const base=local?`/${encodeURIComponent(rd.runId)}/attempt_${cur.k}/`:null;
+  const pos=r.item_final_pos?r.item_final_pos.map(v=>(+v).toFixed(3)).join(', '):'–';
+  let h=`<h3>Try ${cur.k}: ${r.success?'in the bin':'missed'}</h3>
+  <div class="rd-metrics">
+    <div><b style="color:var(${r.success?'--hit':'--miss'})">${r.success?'yes':'no'}</b><span>success</span></div>
+    <div><b>${r.time_s!=null?num(r.time_s)+' s':'–'}</b><span>time</span></div>
+    <div><b>${sfx(r.collisions)}</b><span>collisions</span></div>
+    <div><b>${r.energy_j!=null?num(r.energy_j)+' J':r.energy!=null?num(r.energy)+' J':'–'}</b><span>energy</span></div>
+    <div><b>${r.lifted==null?'–':r.lifted?'yes':'no'}</b><span>lifted</span></div>
+    <div><b>${r.dropped==null?'–':r.dropped?'yes':'no'}</b><span>dropped</span></div>
+    <div><b style="font-size:12px">${esc(pos)}</b><span>item final xyz (m)</span></div>
+    ${t&&t.failure_mode?`<div><b style="font-size:13px">${esc(t.failure_mode.replace(/_/g,' '))}</b><span>tracker failure mode</span></div>`:''}
+    ${t&&t.landing_error_m!=null?`<div><b>${num(t.landing_error_m*100)} cm</b><span>landing error</span></div>`:''}
+    ${r.wall_s!=null?`<div><b>${num(r.wall_s)} s</b><span>wall clock</span></div>`:''}
+  </div>
+  ${r.error?`<div class="err">${esc(String(r.error).slice(0,1500))}</div>`:''}
+  <h3>Robot calls</h3><div class="calls-wrap" id="rdCalls"><p class="note" style="padding:8px">${local?'Loading…':'In the QM sandbox until collected.'}</p></div>
+  <h3>Code</h3><div class="row-actions"><button type="button" data-act="copy">Copy</button></div>
+  <pre id="rdCode">${esc(cur.code||'(code not recorded)')}</pre>
+  ${local?`<details id="rdReason"><summary>Model reply</summary><pre class="wrap">Loading…</pre></details>`:''}`;
+  box.innerHTML=h;
+  box.querySelector('[data-act="copy"]').addEventListener('click',e=>{navigator.clipboard&&navigator.clipboard.writeText(cur.code||'').then(()=>{e.target.textContent='Copied'},()=>{e.target.textContent='Copy failed'})});
+  const rs=box.querySelector('#rdReason');
+  if(rs)rs.addEventListener('toggle',async()=>{if(!rs.open||rs.dataset.done)return;rs.dataset.done=1;
+    try{const t=await fetch(base+'response.md',{cache:'no-store'});rs.querySelector('pre').textContent=t.ok?await t.text():'(no reply saved)'}catch{rs.querySelector('pre').textContent='(could not load)'}});
+  // media
+  const player=rdBody.querySelector('#rdPlayer'), frames=rdBody.querySelector('#rdFrames');
+  const m=r.media||{};
+  if(local){
+    const kf=(m.keyframes||[]).map(f=>base+f);
+    frames.innerHTML=kf.map((f,i)=>`<img src="${f}" alt="Key frame ${i+1} of try ${cur.k}" data-i="${i}">`).join('');
+    frames.querySelectorAll('img').forEach(img=>img.addEventListener('click',()=>{const v=player.querySelector('video');if(!v)return;const T=v.duration||0;v.currentTime=T*(+img.dataset.i)/Math.max(1,kf.length-1)}));
+    playVideo(base,m,cur.k);
+    loadCalls(base);
+  }else if(t){
+    const src=`/api/races/${encodeURIComponent(data.race_id)}/attempts/${encodeURIComponent(t.agent_id)}/${t.seed}/${t.attempt}/media/`;
+    if(t.video){player.innerHTML=`<video controls playsinline src="${src}video"></video>`}
+    else if(t.frames&&t.frames.length){player.innerHTML=`<img src="${src}frame${t.frames.length-1}" alt="Final frame"><div class="state">Key frames from the tracker</div>`;
+      frames.innerHTML=t.frames.map((f,i)=>`<img src="${src}frame${i}" alt="Key frame ${i+1}">`).join('')}
+    else player.innerHTML='<div class="state">Video after QM runs are collected</div>';
+  }
+}
+function setPlayer(html){const p=rdBody.querySelector('#rdPlayer');if(p)p.innerHTML=html;return p}
+async function playVideo(base,m,k){
+  const key=`${rd.runId}|${k}`, poster=m.poster?base+m.poster:'';
+  const show=()=>{const p=setPlayer(`<video controls playsinline preload="auto" ${poster?`poster="${poster}"`:''} src="${base}attempt.mp4"></video>`);
+    const v=p.querySelector('video');v.addEventListener('timeupdate',()=>markCall(v.currentTime))};
+  const url=`/api/runs/${encodeURIComponent(rd.runId)}/attempt_${k}/render`;
+  let st;try{st=await getJSON(url)}catch{st={state:'none'}}
+  if(!rd||`${rd.runId}|${rd.k}`!==key)return;
+  if(st.state==='done')return show();
+  if(st.state==='unavailable'){setPlayer(`${poster?`<img src="${poster}" alt="Final frame">`:''}<div class="state">${esc(st.error||'No trajectory: this attempt never reached the sim')}</div>`);return}
+  if(st.state==='none'||st.state==='failed'){
+    try{st=await getJSON(url,{method:'POST'})}catch(err){st={state:'failed',error:err.message}}}
+  const wait=()=>{if(!rd||`${rd.runId}|${rd.k}`!==key)return;
+    getJSON(url).then(x=>{if(!rd||`${rd.runId}|${rd.k}`!==key)return;
+      if(x.state==='done')return show();
+      if(x.state==='failed'){setPlayer(`${poster?`<img src="${poster}" alt="Final frame">`:''}<div class="state">Render failed: ${esc((x.error||'').slice(0,160))}</div>`);return}
+      rd.timer=setTimeout(wait,1500)}).catch(()=>{rd.timer=setTimeout(wait,3000)})};
+  if(st.state==='done')return show();
+  setPlayer(`${poster?`<img src="${poster}" alt="Final frame">`:''}<div class="state">${st.state==='failed'?`Render queue busy, retrying…`:'Rendering video…'}</div>`);
+  rd.timer=setTimeout(st.state==='failed'?()=>playVideo(base,m,k):wait,st.state==='failed'?4000:1500);
+}
+let calls=[];
+async function loadCalls(base){
+  const box=rdBody.querySelector('#rdCalls');
+  try{const r=await fetch(base+'calls.json',{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();
+    calls=j.calls||[];
+    const ex=j.exception;
+    box.innerHTML=`<table class="calls"><thead><tr><th>t (s)</th><th>call</th><th>args</th><th>tcp after</th><th>grip</th></tr></thead><tbody>${calls.map((c,i)=>{
+      const a=c.args&&Object.keys(c.args).length?JSON.stringify(c.args):'';
+      return `<tr class="seek${c.error?' bad':''}" data-i="${i}" data-t="${c.t_start}"><td>${num(c.t_start,2)}–${num(c.t_end,2)}</td><td>${esc(c.call)}</td><td>${esc(a.length>80?a.slice(0,80)+'…':a)}${c.error?`<br>${esc(c.error)}`:''}</td><td>${c.tcp_after?esc(c.tcp_after.map(v=>(+v).toFixed(2)).join(', ')):''}</td><td>${c.gripper_width_after!=null?num(c.gripper_width_after*100,1)+' cm':''}${c.holding_after?' · holding':''}</td></tr>`}).join('')}</tbody></table>
+      ${ex?`<div class="err" style="padding:8px">${esc(ex.type)}: ${esc(ex.message)}${ex.sim_time!=null?` at t=${num(ex.sim_time,2)} s`:''}${ex.in_call?` in ${esc(ex.in_call)}`:''}</div>`:''}`;
+    box.querySelectorAll('tr.seek').forEach(tr=>tr.addEventListener('click',()=>{const v=rdBody.querySelector('#rdPlayer video');if(!v)return;
+      v.currentTime=(Math.round(+tr.dataset.t*30)+0.5)/30;v.pause()}));
+  }catch{box.innerHTML='<p class="note" style="padding:8px">No calls (never reached the sim).</p>'}
+}
+function markCall(t){
+  const rows=rdBody.querySelectorAll('#rdCalls tr.seek');let idx=-1;
+  calls.forEach((c,i)=>{if(c.t_start<=t+1e-6)idx=i});
+  rows.forEach(r=>r.classList.toggle('now',+r.dataset.i===idx));
+}
+
+/* ---------- loop ---------- */
+let busy=false, n=0;
+async function tick(){
+  if(busy)return;busy=true;
+  try{
+    await pollLaunch();
+    if(n%4===0){const j=await getJSON('/api/races');const list=j.races||[];
+      const cur=fRace.value;
+      fRace.innerHTML='<option value="">latest</option>'+list.map(r=>`<option value="${esc(r.race_id)}">${esc(((r.tracker||{}).label||(r.local||{}).label||'')+' '+r.race_id)}</option>`).join('');
+      fRace.value=cur;renderHistory(list);
+      if(!pinned&&!launchId&&list[0]){const has=r=>((r.tracker||{}).summary||{}).attempts>0||(r.local||{}).done;
+        raceId=(list.find(has)||list[0]).race_id}}
+    if(n%8===0)renderScroll();
+    if(raceId&&n%2===0)await pollQM();
+    if(raceId){data=await getJSON(`/api/races/${encodeURIComponent(raceId)}`);await render(data)}
+    if(rd&&rd.runId&&rd.summary&&rd.summary.status==='running'&&n%3===0){   // keep an open detail live
+      const s2=await getJSON(`/api/runs/${encodeURIComponent(rd.runId)}`).catch(()=>null);
+      if(rd&&s2&&((s2.attempts||[]).length!==(rd.summary.attempts||[]).length||s2.status!==rd.summary.status)){
+        const follow=rd.k===(rd.summary.attempts||[]).length||!rd.k;rd.summary=s2;
+        if(follow)rd.k=(s2.attempts||[]).length||1;drawDetail()}}
+  }catch(err){console.warn('[dojo]',err)}
+  finally{busy=false;n++}
+}
+{const q=new URLSearchParams(location.search).get('race');if(q&&/^[\w.-]+$/.test(q)){raceId=q;pinned=true}}
+tick();setInterval(tick,1500);
+})();
 </script>
 </body>
 </html>

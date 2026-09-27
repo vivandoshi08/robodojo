@@ -19,9 +19,17 @@ Phase 2 race runner:
 
 record_attempt never raises: if the tracker is down the attempt is appended to
 runs_backup.jsonl and replay_backup() re-sends it. A dead dashboard can't kill a run.
+
+Shell (QM swarm workers, scripts): every command prints one JSON line.
+
+    python -m racetrack.client start  --label qm --task can_to_bin          # {"race_id": ...}
+    python -m racetrack.client record --race-id R --agent-id place --seed 0 --attempt 2 --result path/result.json
+    python -m racetrack.client close  --race-id R                            # winner + lessons + skill
+    python -m racetrack.client leaderboard --race-id R
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -129,3 +137,63 @@ class Tracker:
     def compare(self, *race_ids: str) -> dict[str, Any]:
         q = f"?race_ids={','.join(race_ids)}" if race_ids else ""
         return self._req("GET", f"/compare{q}")
+
+
+# ---------------------------------------------------------------- CLI ---
+
+def main(argv: Optional[list[str]] = None) -> int:
+    ap = argparse.ArgumentParser(prog="python -m racetrack.client", description="Racetrack tracker client.")
+    ap.add_argument("--url", default=None, help="tracker URL (default $RACETRACK_URL or http://localhost:8000)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("start", help="create a race; prints {race_id}")
+    p.add_argument("--label", default="")
+    p.add_argument("--task", default="can_to_bin")
+    p.add_argument("--race-id", default=None)
+    p.add_argument("--max-attempts", type=int, default=None)
+    p = sub.add_parser("register", help="register an agent (strategy) on a race")
+    p.add_argument("--race-id", required=True)
+    p.add_argument("--agent-id", required=True)
+    p.add_argument("--persona", default=None)
+    p.add_argument("--strategy", default=None)
+    p = sub.add_parser("record", help="record one attempt from its result.json")
+    p.add_argument("--race-id", required=True)
+    p.add_argument("--agent-id", required=True)
+    p.add_argument("--seed", type=int, required=True)
+    p.add_argument("--attempt", type=int, required=True)
+    p.add_argument("--result", required=True, help="path to result.json")
+    for name in ("close", "leaderboard", "lessons"):
+        p = sub.add_parser(name)
+        p.add_argument("--race-id", required=True)
+    args = ap.parse_args(argv)
+
+    t = Tracker(args.url)
+    try:
+        if args.cmd == "start":
+            scoring = {"max_attempts": args.max_attempts} if args.max_attempts else None
+            out: Any = {"race_id": t.start_race(label=args.label, task=args.task,
+                                                race_id=args.race_id, scoring=scoring)}
+        elif args.cmd == "register":
+            info = {k: v for k, v in (("persona", args.persona), ("strategy", args.strategy)) if v}
+            t.register_agent(args.race_id, args.agent_id, **info)
+            out = {"registered": args.agent_id}
+        elif args.cmd == "record":
+            ok = t.record_attempt(args.race_id, args.agent_id, args.seed, args.attempt, args.result)
+            out = {"recorded": ok}
+        elif args.cmd == "close":
+            out = t.close_race(args.race_id)
+        elif args.cmd == "leaderboard":
+            out = t.leaderboard(args.race_id)
+        else:
+            out = t.lessons(args.race_id)
+    except urllib.error.HTTPError as e:
+        print(json.dumps({"error": f"tracker said {e.code}: {e.read().decode(errors='replace')[:300]}"}))
+        return 1
+    except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+        print(json.dumps({"error": f"tracker unreachable at {t.base_url}: {e}"}))
+        return 1
+    print(json.dumps(out, default=str))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

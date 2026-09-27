@@ -8,6 +8,8 @@ result.json plus agent_id / seed / attempt. Everything else is computed here.
 from __future__ import annotations
 
 import os
+import sys
+import threading
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -26,6 +28,17 @@ MEDIA_ROOT = Path(os.environ.get("RACETRACK_MEDIA_ROOT", ".")).resolve()
 app = FastAPI(title="Race tracker")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 HERE = Path(__file__).parent
+REPO = HERE.resolve().parent
+RACES_DIR = Path(os.environ.get("RACETRACK_RACES_DIR", REPO / "races"))
+
+
+def _memory_hooks():
+    """robot_race.memory_hooks (GBrain + Memorable) lives on the host only; imported lazily so the
+    tracker still runs without it. QM sandboxes get memory through /races/{id}/context, never directly."""
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from robot_race import memory_hooks
+    return memory_hooks
 
 
 def _race_or_404(race_id: str) -> dict[str, Any]:
@@ -76,7 +89,42 @@ def close_race(race_id: str):
     winner = pick_winner(scores, final=True)
     store.close_race(race_id, winner.agent_id if winner else None)
     return {"race": store.get_race(race_id), "winner": winner,
-            "lessons": lessons(scores, by_agent, cfg, final=True)}
+            "lessons": lessons(scores, by_agent, cfg, final=True),
+            "memory_post": _schedule_post_race(race_id)}
+
+
+def _schedule_post_race(race_id: str) -> str:
+    """Distill the finished race into memory (GBrain skill, ...) without holding up the response."""
+    def run():
+        try:
+            _memory_hooks().post_race(race_id)
+        except Exception as e:  # memory is best effort; a closed race stays closed
+            print(f"[tracker] post_race({race_id}) failed: {type(e).__name__}: {e}", file=sys.stderr)
+    threading.Thread(target=run, name=f"post_race-{race_id}", daemon=True).start()
+    return "scheduled"
+
+
+@app.get("/races/{race_id}/context")
+def race_context(race_id: str, task: Optional[str] = None):
+    """Recalled memory (distilled GBrain skill + Memorable episodes) for this race's racers, as markdown.
+    Computed on the host, cached in races/<id>/context.md. Fails open to an empty context."""
+    race = _race_or_404(race_id)
+    task = task or race.get("task") or "can_to_bin"
+    cached = RACES_DIR / race_id / "context.md"
+    if cached.exists():
+        return {"race_id": race_id, "task": task, "context": cached.read_text(), "memory": None,
+                "cached": True}
+    try:
+        out = _memory_hooks().pre_race_context(task, race_id=race_id)
+    except Exception as e:
+        return {"race_id": race_id, "task": task, "context": "", "memory": None,
+                "error": f"{type(e).__name__}: {e}"}
+    text, memory = (out if isinstance(out, tuple) else (out, None))
+    text = text or ""
+    if text.strip():
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_text(text)
+    return {"race_id": race_id, "task": task, "context": text, "memory": memory, "cached": False}
 
 
 # ----------------------------------------------------------------- agents ---
