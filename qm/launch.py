@@ -8,17 +8,25 @@
     uv run python qm/launch.py status --race-id <race_id>
 
 launch = open the race on the tracker, recall memory (GBrain + Memorable, host side), plan the
-strategies, register them, write races/<race_id>/{plan,contexts,launch}.json. Starting the QM root
-session is NOT automated yet (QM's API needs a signed request; see qm/README.md "Launching from the
-web UI"): launch returns `qm.message`, the one line to send the QM root, and the race shows up on
-the tracker as soon as its workers record attempts.
+strategies, register them, write races/<race_id>/{plan,contexts,launch}.json, then start the QM root
+turn with POST /v1/turns (surface "web", the robodojo-race skill does the rest). That call has to be
+signed with QM's CORE_SIGNING_SECRET (+ PORTAL_IDENTITY_SECRET for the actor), read from qm/dev.env or
+the environment, never printed. Without them, or if QM refuses, launch falls back to status "manual":
+`qm.message` is the one line to send the QM root in its web UI.
 """
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
+import hmac
 import json
+import os
 import sys
 import time
+import urllib.error
+import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -31,9 +39,116 @@ from racetrack.client import Tracker  # noqa: E402
 import plan_to_contexts as ptc  # noqa: E402
 
 
+QM_URL = os.environ.get("QM_URL", "http://localhost:8081")
+DEV_ENV = ROOT / "qm" / "dev.env"
+
+
+def _dev_env() -> dict[str, str]:
+    out: dict[str, str] = {}
+    try:
+        for line in DEV_ENV.read_text().splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                k, v = line.split("=", 1)
+                out[k.strip()] = v.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return out
+
+
+def _secret(name: str) -> Optional[str]:
+    return os.environ.get(name) or _dev_env().get(name) or None
+
+
+def _b64(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def portal_identity(principal: str, secret: str, ttl_s: int = 60) -> str:
+    """QM's x-portal-identity token: compact JWS HS256 over {p, exp}, kid derived from the secret."""
+    kid = _b64(hmac.new(secret.encode(), b"qm-signing-key-id", hashlib.sha256).digest())[:8]
+    head = _b64(json.dumps({"alg": "HS256", "kid": kid}, separators=(",", ":")).encode())
+    body = _b64(json.dumps({"p": principal, "exp": int(time.time() * 1000) + ttl_s * 1000},
+                           separators=(",", ":")).encode())
+    sig = _b64(hmac.new(secret.encode(), f"{head}.{body}".encode(), hashlib.sha256).digest())
+    return f"{head}.{body}.{sig}"
+
+
+def signed_headers(secret: str, method: str, path: str, body: str = "",
+                   now_s: Optional[int] = None) -> dict[str, str]:
+    """QM source auth: x-signature = v0=HMAC_SHA256(secret, "v0:<ts>:<METHOD>\n<path?query>\n<body>")."""
+    ts = int(time.time()) if now_s is None else now_s
+    mac = hmac.new(secret.encode(), f"v0:{ts}:{method}\n{path}\n{body}".encode(), hashlib.sha256)
+    return {"x-timestamp": str(ts), "x-signature": "v0=" + mac.hexdigest()}
+
+
+def qm_request(method: str, path: str, body: Any = None, *, principal: Optional[str] = None,
+               timeout: float = 30.0) -> tuple[int, Any]:
+    """One signed call to QM's core API. Raises RuntimeError when no signing secret is configured."""
+    secret = _secret("CORE_SIGNING_SECRET")
+    if not secret:
+        raise RuntimeError("CORE_SIGNING_SECRET not set in qm/dev.env or the environment")
+    sep = "&" if "?" in path else "?"
+    path = f"{path}{sep}_sourceAuthNonce={int(time.time() * 1000)}-{uuid.uuid4().hex[:12]}"
+    raw = "" if body is None else json.dumps(body)
+    headers = {"content-type": "application/json", **signed_headers(secret, method, path, raw)}
+    psecret = _secret("PORTAL_IDENTITY_SECRET")
+    if principal and psecret:
+        headers["x-portal-identity"] = portal_identity(principal, psecret)
+    req = urllib.request.Request(QM_URL.rstrip("/") + path, data=raw.encode() if raw else None,
+                                 method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            text = r.read().decode()
+            status = r.status
+    except urllib.error.HTTPError as e:
+        text, status = e.read().decode(errors="replace"), e.code
+    try:
+        return status, json.loads(text) if text else None
+    except ValueError:
+        return status, text[:500]
+
+
+def qm_principal() -> str:
+    """The QM user the race runs as (the dev portal's local principal by default)."""
+    return (os.environ.get("QM_PRINCIPAL") or _dev_env().get("PORTAL_DEV_PRINCIPAL")
+            or os.environ.get("USER") or "dev-admin")
+
+
+def qm_auth_check() -> dict[str, Any]:
+    """Dry check: a signed GET that costs nothing. ok = QM accepted our signature."""
+    try:
+        status, body = qm_request("GET", "/v1/swarm", principal=qm_principal(), timeout=10)
+    except RuntimeError as e:
+        return {"ok": False, "reason": str(e)}
+    except (urllib.error.URLError, OSError) as e:
+        return {"ok": False, "reason": f"QM unreachable at {QM_URL}: {e}"}
+    unauthorized = status == 401 or (isinstance(body, dict) and body.get("error") == "unauthorized")
+    return {"ok": not unauthorized, "status": status,
+            "reason": (body.get("message") if isinstance(body, dict) else None) if unauthorized else None}
+
+
+def start_qm_turn(race_id: str, message: str, contexts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Start the QM root turn that runs the robodojo-race skill for this race (async; returns ids)."""
+    principal = qm_principal()
+    text = (f"{message}. Use the robodojo-race skill as the root. The race is already prepared on the "
+            f"tracker (race id {race_id}); spawn exactly these racer contexts:\n```json\n"
+            f"{json.dumps(contexts)}\n```")
+    body = {"surface": "web", "actor": {"externalId": principal},
+            "conversation": {"kind": "dm", "threadRef": f"web:{principal}:robodojo-{race_id}"},
+            "text": text, "origin": {"kind": "human"}, "addressed": True, "liveActor": True,
+            "idempotencyKey": f"robodojo-{race_id}", "async": True}
+    status, out = qm_request("POST", "/v1/turns?async=1", body, principal=principal)
+    if status >= 400:
+        raise RuntimeError(f"QM /v1/turns {status}: {json.dumps(out)[:300]}")
+    out = out if isinstance(out, dict) else {}
+    return {"status": "started", "http": status, "session_id": out.get("sessionId"),
+            "run_id": out.get("runId"), "turn_status": out.get("status"),
+            "thread_ref": body["conversation"]["threadRef"]}
+
+
 def launch_qm_race(task: str = "can_to_bin", agents: int = 4, seeds: Optional[list[int]] = None,
                    tries: int = 5, label: str = "qm", *, planner: bool = True, memory: bool = True,
-                   tracker_url: Optional[str] = None) -> dict[str, Any]:
+                   tracker_url: Optional[str] = None, start: bool = True) -> dict[str, Any]:
     """Prepare a QM race (tracker race + plan + memory) and say how to start it. One seed per QM race:
     extra seeds are recorded but not raced (the swarm skill races one scene)."""
     seeds = list(seeds or [0])
@@ -51,6 +166,12 @@ def launch_qm_race(task: str = "can_to_bin", agents: int = 4, seeds: Optional[li
                      "note": "send `message` to the QM root (web UI); API launch needs QM's signing secret"},
               "skipped_seeds": seeds[1:]}
     race_dir = ROOT / prep["dir"]
+    if start and race_id:
+        try:
+            contexts = json.loads((race_dir / "contexts.json").read_text())
+            launch["qm"] = {**launch["qm"], **start_qm_turn(race_id, message, contexts), "note": None}
+        except Exception as e:  # no secret, QM down, refused: a person starts it from QM's web UI
+            launch["qm"]["error"] = f"{type(e).__name__}: {e}"
     (race_dir / "launch.json").write_text(json.dumps(launch, indent=2))
     launch["plan"] = json.loads((race_dir / "plan.json").read_text())
     launch["dir"] = prep["dir"]
@@ -68,7 +189,9 @@ def qm_status(race_id: str, tracker_url: Optional[str] = None) -> dict[str, Any]
         attempts = t._req("GET", f"/races/{race_id}/attempts")
     except Exception as e:
         return {"race_id": race_id, "launch": launch, "error": f"tracker: {type(e).__name__}: {e}"}
-    per_agent = {a: {"attempts": 0, "solved": False} for a in agents}
+    ids = ([a["agent_id"] for a in agents] if isinstance(agents, list)
+           else list(agents))   # tracker returns {agent_id: info}; accept a list of agent dicts too
+    per_agent = {a: {"attempts": 0, "solved": False} for a in ids}
     for a in attempts:
         s = per_agent.setdefault(a["agent_id"], {"attempts": 0, "solved": False})
         s["attempts"] = max(s["attempts"], a["attempt"])
@@ -89,14 +212,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--label", default="qm")
     p.add_argument("--no-planner", action="store_true")
     p.add_argument("--no-memory", action="store_true")
+    p.add_argument("--no-start", action="store_true", help="prepare only; don't call QM")
     p = sub.add_parser("status")
     p.add_argument("--race-id", required=True)
+    sub.add_parser("auth-check", help="signed GET against QM (free); ok = signature accepted")
     args = ap.parse_args(argv)
     if args.cmd == "launch":
         out = launch_qm_race(args.task, args.agents, [int(s) for s in args.seeds.split(",") if s != ""],
                              args.tries, args.label, planner=not args.no_planner,
-                             memory=not args.no_memory, tracker_url=args.url)
+                             memory=not args.no_memory, tracker_url=args.url, start=not args.no_start)
         out.pop("plan", None)
+    elif args.cmd == "auth-check":
+        out = qm_auth_check()
     else:
         out = qm_status(args.race_id, args.url)
     print(json.dumps(out, default=str))

@@ -149,3 +149,52 @@ def test_launch_and_status(monkeypatch, tmp_path, capsys):
     st = ql.qm_status(race)
     assert st["workers"]["drop"] == {"attempts": 2, "solved": True}
     assert st["workers"]["place"] == {"attempts": 0, "solved": False} and st["launch"]["seed"] == 3
+
+
+def test_qm_status_accepts_agent_list(monkeypatch):
+    import launch as ql
+    calls = {"/leaderboard": {"final": False}, "/agents": [{"agent_id": "place"}, {"agent_id": "toss"}],
+             "/attempts": [{"agent_id": "toss", "attempt": 1, "success": False}]}
+
+    def fake(self, method, path, body=None):
+        return next(v for k, v in calls.items() if path.endswith(k))
+    monkeypatch.setattr(rc.Tracker, "_req", fake)
+    st = ql.qm_status("r1")
+    assert st["workers"] == {"place": {"attempts": 0, "solved": False},
+                             "toss": {"attempts": 1, "solved": False}}
+
+
+def test_qm_signing_matches_qm_scheme():
+    import hashlib
+    import hmac as _h
+    import launch as ql
+    h = ql.signed_headers("s3cret", "POST", "/v1/turns?async=1", '{"a":1}', now_s=1700000000)
+    want = _h.new(b"s3cret", b'v0:1700000000:POST\n/v1/turns?async=1\n{"a":1}', hashlib.sha256).hexdigest()
+    assert h == {"x-timestamp": "1700000000", "x-signature": "v0=" + want}
+    assert len(ql.portal_identity("alice", "k").split(".")) == 3
+
+
+def test_launch_falls_back_to_manual_without_secret(monkeypatch, tmp_path):
+    import launch as ql
+    monkeypatch.setattr(ptc, "ROOT", tmp_path)
+    monkeypatch.setattr(ql, "ROOT", tmp_path)
+    monkeypatch.setattr(ql, "DEV_ENV", tmp_path / "none.env")
+    monkeypatch.delenv("CORE_SIGNING_SECRET", raising=False)
+    out = ql.launch_qm_race("can_to_bin", agents=1, planner=False, memory=False)
+    assert out["qm"]["status"] == "manual" and "CORE_SIGNING_SECRET" in out["qm"]["error"]
+
+
+def test_launch_starts_qm_turn(monkeypatch, tmp_path):
+    import launch as ql
+    monkeypatch.setattr(ptc, "ROOT", tmp_path)
+    monkeypatch.setattr(ql, "ROOT", tmp_path)
+    sent = {}
+
+    def fake_qm(method, path, body=None, **kw):
+        sent.update(method=method, path=path, body=body)
+        return 202, {"status": "queued", "sessionId": "s1", "runId": "r1"}
+    monkeypatch.setattr(ql, "qm_request", fake_qm)
+    out = ql.launch_qm_race("can_to_bin", agents=2, planner=False, memory=False)
+    assert out["qm"]["status"] == "started" and out["qm"]["session_id"] == "s1"
+    assert sent["body"]["surface"] == "web" and out["race_id"] in sent["body"]["text"]
+    assert '"agent_id": "drop"' in sent["body"]["text"]

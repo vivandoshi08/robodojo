@@ -109,11 +109,18 @@ qm/finish_race.sh            host: collect runs, close the race, distill memory
 strategies and writes `races/<race_id>/{plan,contexts,launch}.json`. `qm_status(race_id)` returns each
 worker's progress from the tracker (attempts so far, solved, winner once closed).
 
-Starting the QM root session over QM's API is **not automated yet**. QM's core accepts external
-requests only when they are HMAC-signed with its `CORE_SIGNING_SECRET`, and the dev instance derives
-that secret itself unless you set one. For now `launch` returns `qm.message` (e.g. "Race <id> on can_to_bin seed 0")
-for a person to send to the QM root in the web UI.
+`launch` then starts the QM root turn itself: `POST /v1/turns` (surface `web`, async) with the race id and
+spawn contexts. The request is HMAC-signed with `CORE_SIGNING_SECRET` and carries an `x-portal-identity`
+token signed with `PORTAL_IDENTITY_SECRET` (same scheme as QM's `src/auth/`). Both values are read from
+`qm/dev.env` or the environment and never printed. With no secret, or if QM refuses, `launch.json` keeps
+`qm.status: "manual"` and `qm.message` is the line to send the QM root in its web UI.
 
-To enable API launch: put your own `CORE_SIGNING_SECRET=<openssl rand -hex 32>` in `qm/dev.env` and
-restart QM (`bash qm/start_qm.sh down && bash qm/start_qm.sh`). launch.py can then sign requests with
-the same value. The session/turn route still has to be chosen and wired.
+One-time setup (QM's dev instance otherwise derives secrets launch.py can't know):
+
+```bash
+printf 'CORE_SIGNING_SECRET=%s\nPORTAL_IDENTITY_SECRET=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" >> qm/dev.env
+bash qm/start_qm.sh down && bash qm/start_qm.sh            # restart QM so it picks them up
+uv run python qm/launch.py auth-check                        # free signed GET: {"ok": true}
+```
+
+Runs as the QM user `$QM_PRINCIPAL` (default `PORTAL_DEV_PRINCIPAL` from dev.env, else `$USER`).
