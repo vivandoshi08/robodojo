@@ -42,11 +42,10 @@ bash qm/build_sandbox.sh                            # robodojo-qm-sandbox:latest
 
 # 3. Config: copy the template, add your key, point QM's dev instance at it
 cp qm/dev.env.example qm/dev.env                    # edit ANTHROPIC_API_KEY
-export QM_DEV_ENV="$PWD/qm/dev.env"
 
 # 4. Start QM (Postgres in Docker + web UI), then open the printed URL
-(cd ../qm && npm run dev-instance:web)
-(cd ../qm && npm run dev-instance:doctor)          # if anything looks off
+bash qm/start_qm.sh                                 # QM_DEV_ENV=qm/dev.env + npm run dev-instance:web
+bash qm/start_qm.sh doctor                          # if anything looks off (also: status, down)
 ```
 
 5. Import the skill: Admin UI → Skill packs → Register (repo is public, no credential needed):
@@ -63,6 +62,7 @@ qm/sandbox/Dockerfile        QM local sandbox + MuJoCo (EGL) + uv env + Panda as
 qm/build_qm_base.sh          builds QM's base sandbox image for the host arch
 qm/build_sandbox.sh          builds robodojo-qm-sandbox:latest
 qm/dev.env.example           dev-instance settings (local sandbox image, Postgres stores, swarms)
+qm/start_qm.sh               starts QM with those settings
 qm/strategies.json           strategy cards, one swarm worker each
 qm/skills/robodojo-race/     the skill root + racers follow
 qm/collect_runs.sh           pull race artifacts out of sandbox containers into runs/qm/
