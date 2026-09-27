@@ -223,3 +223,6 @@ runs_demo/
 assets/menagerie/
 .claude/worktrees/
 MUJOCO_LOG.TXT
+
+# QM local config (has API key)
+qm/dev.env
