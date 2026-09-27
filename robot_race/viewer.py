@@ -310,7 +310,10 @@ def write_index(run_dir: str) -> str:
     cards += [_card(run_dir, n, None, codes.get(n), live=True) for n in live]
     body = (f'<header><div class="top"><h1>{_e(run_id)}</h1>{_badge(status, status)}</div>'
             f'<div class="meta">{meta_html}</div>'
-            f'<div class="mut"><a href="../index.html">all runs</a></div></header>\n'
+            f'<div class="mut"><a href="../index.html">all runs</a>'
+            + (' · <a href="trace.html">audit trace</a> (exact model inputs/outputs + provenance)'
+               if os.path.isfile(os.path.join(run_dir, "trace.html")) else "")
+            + '</div></header>\n'
             f'<div class="grid">\n' + ("\n".join(cards) or '<p class="mut">no attempts yet</p>') + "\n</div>")
     if running:
         body += "\n" + LIVE_JS
