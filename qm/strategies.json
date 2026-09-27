@@ -1,0 +1,22 @@
+[
+  {
+    "id": "place",
+    "name": "Pick and place over the bin",
+    "card": "Grasp the item, carry it until it is directly above the bin center, lower it below the rim height (z < 0.30), then open the gripper. Never release from high up."
+  },
+  {
+    "id": "drop",
+    "name": "Drop from above",
+    "card": "Grasp the item, carry it high over the bin center and release from about 10 cm above the rim. Optimize for speed; accept a short fall."
+  },
+  {
+    "id": "toss",
+    "name": "Toss from a distance",
+    "card": "Grasp the item and release it while the gripper is still moving toward the bin, so it flies in on an arc. Do not carry it all the way over the bin."
+  },
+  {
+    "id": "push",
+    "name": "Push off the table edge",
+    "card": "Do not grasp. Close the gripper and use it as a paddle to push the item across the table and off the edge nearest the bin so it falls in."
+  }
+]

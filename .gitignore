@@ -221,3 +221,6 @@ __marimo__/
 runs/
 assets/menagerie/
 .claude/worktrees/
+
+# QM local config (has API key)
+qm/dev.env
