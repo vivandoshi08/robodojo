@@ -8,7 +8,7 @@ ns = runpy.run_path("policies/reference_pick_and_drop.py")
 for task in TASKS:
     ok = 0; fails = []; t = time.time()
     for seed in range(10):
-        env = Env(task, seed, record=False); r = SimRobot(env)
+        env = Env(task, seed, record=False); r = SimRobot(env, observation="oracle")
         err = None
         try: ns["run"](r)
         except Exception as e: err = repr(e)

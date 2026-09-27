@@ -30,7 +30,7 @@ def fake_env(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "robot_race.executor", types.SimpleNamespace(run_policy=fake_run_policy))
     front = agent.png_b64(np.full((48, 64, 3), 7, np.uint8))
     top = agent.png_b64(np.full((48, 64, 3), 99, np.uint8))
-    monkeypatch.setattr(agent, "observe_scene", lambda task, seed: ({"item": {"pos": [0.5, -0.2, 0.25]}},
+    monkeypatch.setattr(agent, "observe_scene", lambda task, seed, **kw: ({"item": {"pos": [0.5, -0.2, 0.25]}},
                                                                      {"front": front, "top": top}))
     monkeypatch.setattr(agent, "_sleep", lambda s: None)
     return types.SimpleNamespace(runs=tmp_path / "runs", front=front, top=top)

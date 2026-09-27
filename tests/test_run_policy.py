@@ -41,7 +41,7 @@ def test_parse_tasks():
 def fake_executor(monkeypatch):
     calls = []
 
-    def run_policy_fake(code, task, seed, out_dir, timeout_s=180, fast=False, live=True):
+    def run_policy_fake(code, task, seed, out_dir, timeout_s=180, fast=False, live=True, observation="oracle"):
         calls.append(dict(task=task, seed=seed, out_dir=out_dir, timeout_s=timeout_s, fast=fast,
                           thread=threading.get_ident()))
         if seed == 3:

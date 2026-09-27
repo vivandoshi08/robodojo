@@ -70,7 +70,7 @@ class ScriptedClient:
 def run_demo(runs_dir: str = "runs", seed: int = 0, fast: bool = False, verbose: bool = True):
     client = ScriptedClient(REPLIES)
     s = agent.run_agent_loop("can_to_bin", seed, tries=2, runs_dir=runs_dir, client=client, model=MODEL,
-                             fast=fast, verbose=verbose)
+                             fast=fast, verbose=verbose, observation="oracle")  # scripted reference reads ground truth
     return os.path.join(runs_dir, s["run_id"]), client, s
 
 

@@ -19,7 +19,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from .interfaces import API_DOC
+from .interfaces import api_doc
 from .tasks import TASKS
 
 DEFAULT_MODEL = "claude-sonnet-5"  # pinned for reproducible races; override with ANTHROPIC_MODEL
@@ -27,7 +27,8 @@ MAX_TOKENS = 8192
 API_RETRIES = 3               # our retries on top of the SDK's own (max_retries=2)
 REPO = Path(__file__).resolve().parent.parent
 REFERENCE_POLICY = REPO / "policies" / "reference_pick_and_drop.py"
-FEEDBACK_KEYS = ["success", "error", "time_s", "collisions", "energy_j", "item_final_pos", "lifted", "dropped"]
+# Measured outcome sent back after an attempt. item_final_pos is simulator ground truth: only in oracle mode.
+FEEDBACK_KEYS = ["success", "error", "time_s", "collisions", "energy_j", "lifted", "dropped"]
 _sleep = time.sleep           # patched in tests
 
 SYSTEM_ROLE = ("You are a robotics engineer writing Python control code for a simulated Franka Panda arm. "
@@ -40,8 +41,8 @@ OUTPUT_RULES = """OUTPUT RULES
 - The whole episode must finish within the 40 s sim-time limit."""
 
 
-def system_prompt(strategy: str | None = None) -> str:
-    parts = [SYSTEM_ROLE, API_DOC, OUTPUT_RULES]
+def system_prompt(strategy: str | None = None, observation: str = "telemetry") -> str:
+    parts = [SYSTEM_ROLE, api_doc(observation), OUTPUT_RULES]
     if strategy:
         parts.append(f"Strategy card: {strategy.strip()}")
     return "\n\n".join(parts)
@@ -88,13 +89,15 @@ def text_block(text: str) -> dict:
     return {"type": "text", "text": text}
 
 
-def observe_scene(task: str, seed: int, size=(640, 480)) -> tuple[dict, dict[str, str]]:
-    """Initial get_state() + front/top renders (base64 PNG) from a fresh, unrecorded episode."""
+def observe_scene(task: str, seed: int, size=(640, 480), observation: str = "telemetry") -> tuple[dict, dict[str, str]]:
+    """Initial get_state() + front/top renders (base64 PNG) and their camera calibration, from a fresh episode."""
     from .robot import SimRobot
     from .tasks import Env
     env = Env(task, seed, record=False)
     try:
-        state = SimRobot(env).get_state()
+        robot = SimRobot(env, observation=observation)
+        state = robot.get_state()
+        state["camera_calibration"] = {v: robot.get_camera(v, *size) for v in ("front", "top")}
         images = {v: png_b64(env.render(v, *size)) for v in ("front", "top")}
     finally:
         env.close()
@@ -118,8 +121,9 @@ def first_turn(task: str, state: dict, images: dict[str, str], context: str | No
     return content
 
 
-def feedback_turn(k: int, result: dict, attempt_dir: Path, no_code: bool = False) -> list:
-    fb = {key: result.get(key) for key in FEEDBACK_KEYS}
+def feedback_turn(k: int, result: dict, attempt_dir: Path, no_code: bool = False,
+                  observation: str = "telemetry") -> list:
+    fb = {key: result.get(key) for key in FEEDBACK_KEYS + (["item_final_pos"] if observation == "oracle" else [])}
     fb["calls_tail"] = (result.get("calls") or [])[-12:]
     content = [text_block(f"Attempt {k} result:\n```json\n{json.dumps(fb, default=str)}\n```")]
     if no_code:
@@ -375,7 +379,8 @@ def _make_run_dir(runs_dir: Path, run_id: str | None, task: str, seed: int, stra
 
 def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = None, context: str | None = None,
                    example: bool = False, fast: bool = False, run_id: str | None = None, runs_dir: str = "runs",
-                   client=None, timeout_s: float = 180, model: str | None = None, verbose: bool = True) -> dict:
+                   client=None, timeout_s: float = 180, model: str | None = None, verbose: bool = True,
+                   observation: str = "telemetry") -> dict:
     """Run the Claude retry loop; returns the final summary dict (also at runs/<run_id>/summary.json)."""
     if task not in TASKS:
         raise KeyError(f"unknown task {task!r}; choose from {list(TASKS)}")
@@ -389,21 +394,22 @@ def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = 
                    status="running", solved_at=None, created_at=time.time(), tries=tries, fast=fast,
                    example=example, context=bool(context), error=None, attempts=[],
                    transcript="transcript.jsonl", trace="trace.html", observation=None,
+                   observation_mode=observation,
                    usage={"input_tokens": 0, "output_tokens": 0,
                           "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0})
     run = _Run(run_dir, summary)
     transcript = Transcript(run)
     run.save()
     run.event("run_started", task=task, seed=seed, model=model, strategy=summary["strategy"], tries=tries,
-              fast=fast)
+              fast=fast, observation_mode=observation)
     _refresh_viewer(run_dir, runs_root)
     log(f"run {summary['run_id']}  model={model}  -> {run_dir}")
 
     try:
-        state, images = observe_scene(task, seed)
+        state, images = observe_scene(task, seed, observation=observation)
         summary["observation"] = save_observation(run_dir, state, images)
         run.save()
-        system = system_prompt(strategy)
+        system = system_prompt(strategy, observation)
         messages = [{"role": "user", "content": first_turn(task, state, images, context, example)}]
         for k in range(1, tries + 1):
             adir = run_dir / f"attempt_{k}"
@@ -424,7 +430,7 @@ def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = 
             else:
                 entry["code_path"] = f"attempt_{k}/policy.py"
                 run.event("code_generated", k, code=code, code_sha256=code_sha)
-                result = _run_attempt(code, task, seed, adir, timeout_s, fast, code_sha)
+                result = _run_attempt(code, task, seed, adir, timeout_s, fast, code_sha, observation)
             entry["result"] = result
             summary["attempts"].append(entry)
             if result.get("success"):
@@ -439,7 +445,8 @@ def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = 
             if result.get("success"):
                 break
             if k < tries:
-                messages.append({"role": "user", "content": feedback_turn(k, result, adir, no_code=code is None)})
+                messages.append({"role": "user", "content": feedback_turn(k, result, adir, no_code=code is None,
+                                                                            observation=observation)})
         if summary["status"] == "running":
             summary["status"] = "failed"
     except Exception as e:  # noqa: BLE001  (API hard failure, scene build, ...): mark the run, re-raise nothing
@@ -458,11 +465,11 @@ def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = 
 
 
 def _run_attempt(code: str, task: str, seed: int, adir: Path, timeout_s: float, fast: bool,
-                 code_sha: str | None = None) -> dict:
+                 code_sha: str | None = None, observation: str = "telemetry") -> dict:
     try:
         executor = importlib.import_module("robot_race.executor")
         return executor.run_policy(code, task, seed, str(adir), timeout_s=timeout_s, fast=fast, live=True,
-                                   response_code_sha256=code_sha)
+                                   response_code_sha256=code_sha, observation=observation)
     except Exception as e:  # noqa: BLE001  (executor bug: still a scored, failed attempt)
         (adir / "policy.py").write_text(code)
         result = _failed_result(task, seed, f"executor error: {type(e).__name__}: {e}")

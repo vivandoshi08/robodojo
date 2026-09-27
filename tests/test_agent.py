@@ -39,7 +39,8 @@ class FakeClient:
                                         cache_creation_input_tokens=0))
 
 
-def fake_run_policy(code, task, seed, out_dir, timeout_s=180, fast=False, live=True, response_code_sha256=None):
+def fake_run_policy(code, task, seed, out_dir, timeout_s=180, fast=False, live=True, response_code_sha256=None,
+                    observation="telemetry"):
     from PIL import Image
     out = Path(out_dir)
     (out / "policy.py").write_text(code)
@@ -65,7 +66,7 @@ def env(monkeypatch, tmp_path):
         write_index=lambda d: viewer_calls.append(("index", d)),
         update_manifest=lambda r="runs": viewer_calls.append(("manifest", r))))
     img = agent.png_b64(np.zeros((48, 64, 3), np.uint8))
-    monkeypatch.setattr(agent, "observe_scene", lambda task, seed: ({"item": {"pos": [0.5, -0.2, 0.25]}},
+    monkeypatch.setattr(agent, "observe_scene", lambda task, seed, **kw: ({"item": {"pos": [0.5, -0.2, 0.25]}},
                                                                      {"front": img, "top": img}))
     monkeypatch.setattr(agent, "_sleep", lambda s: None)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
@@ -148,7 +149,7 @@ def test_loop_no_code_then_fail_then_success(env):
     assert fb[-1]["text"] == "Revise run(robot)." and fb[-1]["cache_control"] == {"type": "ephemeral"}
     res = json.loads(fb[0]["text"].split("```json\n")[1].split("\n```")[0])
     assert res["success"] is False and "unreachable" in res["error"] and res["lifted"] is False
-    assert res["item_final_pos"] == [0.45, 0.35, 0.05] and len(res["calls_tail"]) == 12
+    assert "item_final_pos" not in res and len(res["calls_tail"]) == 12  # ground truth: oracle mode only
     imgs = [b for b in fb if b["type"] == "image"]
     assert len(imgs) == 4 and imgs[0]["source"]["media_type"] == "image/png"
     # only the newest user turn carries a cache breakpoint

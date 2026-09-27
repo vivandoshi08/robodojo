@@ -17,6 +17,11 @@ from .tasks import Env
 CONTROL_DT = 0.02          # 50 Hz control loop
 WORKSPACE_R = (0.25, 0.85)  # min/max horizontal-ish reach from the base (m)
 Z_MIN = 0.02
+# "telemetry": what a real arm controller has (joint encoders, forward kinematics, gripper width/grasp
+# signal, calibrated RGB-D cameras, the static workcell map). The item must be found from the cameras.
+# "oracle": telemetry + ground-truth item pose and a contact-based holding flag (scripted policies only).
+OBSERVATIONS = ("telemetry", "oracle")
+GRASP_W = (0.002, 0.078)  # closed gripper stopped between these widths -> an object is between the fingers
 
 
 def _yaw_R(yaw_deg: float) -> np.ndarray:
@@ -41,8 +46,11 @@ def _jsonable(v):
 
 
 class SimRobot:
-    def __init__(self, env: Env):
-        self.env, self.m, self.d = env, env.model, env.data
+    def __init__(self, env: Env, observation: str = "telemetry"):
+        if observation not in OBSERVATIONS:
+            raise ValueError(f"observation must be one of {OBSERVATIONS}")
+        self.env, self.m, self.d, self.observation = env, env.model, env.data, observation
+        self._grip_cmd = "open"
         self._ik_data = mujoco.MjData(self.m)
         self._q_cmd = self.d.qpos[env.arm_qadr].copy()
         self._lo = self.m.jnt_range[[self.m.joint(f"joint{i}").id for i in range(1, 8)], 0]
@@ -127,24 +135,34 @@ class SimRobot:
             return self._get_state()
 
     def _get_state(self) -> dict:
-        env, lay = self.env, self.env.layout
-        width = float(self.d.qpos[self.m.joint("finger_joint1").qposadr[0]]
-                      + self.d.qpos[self.m.joint("finger_joint2").qposadr[0]])
-        item = dict(lay["item"], pos=[round(float(v), 4) for v in env.item_pos()], yaw_deg=round(env.item_yaw_deg(), 1))
-        return {
+        env, lay, d = self.env, self.env.layout, self.d
+        width = float(d.qpos[self.m.joint("finger_joint1").qposadr[0]] + d.qpos[self.m.joint("finger_joint2").qposadr[0]])
+        s = {
             "time_s": round(env.sim_time, 2),
+            "joint_pos": [round(float(v), 4) for v in d.qpos[env.arm_qadr]],
+            "joint_vel": [round(float(v), 4) for v in d.qvel[env.arm_dadr]],
             "tcp": [round(float(v), 4) for v in env.tcp_pos()],
             "gripper_yaw_deg": round(self.yaw_deg, 1),
             "gripper_width": round(width, 4),
-            "holding": env.holding(),
-            "item": item,
-            "bin": lay["bin"],
-            "table": lay["table"],
+            "gripper_command": self._grip_cmd,
+            "grasp_detected": bool(self._grip_cmd == "close" and GRASP_W[0] < width < GRASP_W[1]),
+            "workcell": {"bin": lay["bin"], "table": lay["table"]},
+            "cameras": ["front", "side", "top"],
         }
+        if self.observation == "oracle":
+            s["item"] = dict(lay["item"], pos=[round(float(v), 4) for v in env.item_pos()],
+                             yaw_deg=round(env.item_yaw_deg(), 1))
+            s["holding"] = env.holding()
+            s["bin"], s["table"] = lay["bin"], lay["table"]
+        return s
 
-    def get_image(self, view: str = "front", width: int = 320, height: int = 240) -> np.ndarray:
-        with self._track("get_image", view=view, width=width, height=height):
-            return self.env.render(view, width, height)
+    def get_image(self, view: str = "front", width: int = 320, height: int = 240, depth: bool = False) -> np.ndarray:
+        with self._track("get_image", view=view, width=width, height=height, depth=depth):
+            return self.env.render(view, width, height, depth=depth)
+
+    def get_camera(self, view: str = "front", width: int = 320, height: int = 240) -> dict:
+        with self._track("get_camera", view=view, width=width, height=height):
+            return self.env.camera_info(view, width, height)
 
     def move_to(self, xyz, speed: float = 0.2) -> list:
         self.call_log.append(f"move_to({list(np.round(xyz, 3))}, speed={speed})")
@@ -183,13 +201,13 @@ class SimRobot:
         self.yaw_deg = yaw_deg
 
     def open_gripper(self) -> None:
-        self.call_log.append("open_gripper()")
+        self.call_log.append("open_gripper()"); self._grip_cmd = "open"
         with self._track("open_gripper"):
             self.d.ctrl[7] = 255
             self._steps(0.4)
 
     def close_gripper(self) -> None:
-        self.call_log.append("close_gripper()")
+        self.call_log.append("close_gripper()"); self._grip_cmd = "close"
         with self._track("close_gripper"):
             self.d.ctrl[7] = 0
             self._steps(0.6)

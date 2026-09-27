@@ -73,7 +73,8 @@ def _fill(res: dict, task: str, seed: int, out_dir: str, code_path: str) -> dict
 
 
 def run_policy(code: str, task: str, seed: int, out_dir: str, timeout_s: float = 180,
-               fast: bool = False, live: bool = True, response_code_sha256: str | None = None) -> dict:
+               fast: bool = False, live: bool = True, response_code_sha256: str | None = None,
+               observation: str = "telemetry") -> dict:
     """Runs `code` (must define run(robot)) on (task, seed) in a subprocess. Always returns a full result dict.
     response_code_sha256: sha256 of the code block extracted from the model reply; provenance.json records
     whether the code that actually ran matches it."""
@@ -87,7 +88,7 @@ def run_policy(code: str, task: str, seed: int, out_dir: str, timeout_s: float =
         if os.path.exists(os.path.join(out_dir, stale)):
             os.remove(os.path.join(out_dir, stale))
     cmd = [sys.executable, "-m", "robot_race.executor", "--task", task, "--seed", str(seed),
-           "--code", code_path, "--out", out_dir] + (["--fast"] if fast else []) + ([] if live else ["--no-live"]) \
+           "--code", code_path, "--out", out_dir, "--observation", observation] + (["--fast"] if fast else []) + ([] if live else ["--no-live"]) \
         + (["--response-sha256", response_code_sha256] if response_code_sha256 else [])
     t0, err = time.time(), None
     try:
@@ -152,13 +153,13 @@ def _render_media(task, seed, t, qpos, out_dir, fast) -> None:
 
 
 def worker(task: str, seed: int, code_path: str, out_dir: str, fast: bool = False, live: bool = True,
-           response_sha256: str | None = None) -> dict:
+           response_sha256: str | None = None, observation: str = "telemetry") -> dict:
     from . import replay
     from .robot import SimRobot
     from .tasks import Env
     t0 = time.time()
     env = Env(task, seed, record=False, live_path=os.path.join(out_dir, "live.jpg") if live else None)
-    robot, error, exc = SimRobot(env), None, None
+    robot, error, exc = SimRobot(env, observation=observation), None, None
     with open(code_path, "rb") as f:
         code_bytes = f.read()
     try:
@@ -199,12 +200,12 @@ def worker(task: str, seed: int, code_path: str, out_dir: str, fast: bool = Fals
         keyframe_times=[round(x, 4) for x in keyframe_times(t)],
         video=dict(file="attempt.mp4", fps=VIDEO_FPS, n_frames=int(len(vt)),
                    frame_time="frame i shows sim time i/fps (nearest trajectory sample); last frame = end")
-        if has_mp4 else None, error=error))
+        if has_mp4 else None, error=error, observation=observation))
     media = _media(out_dir)
     # Paths are relative to out_dir: result.json is served to a public site, so no local absolute paths.
     res.update(error=error, calls=robot.call_log, code_path=os.path.basename(code_path), media=media,
                frames=list(media["keyframes"]), video=media["video"],
-               wall_s=round(time.time() - t0, 2))
+               wall_s=round(time.time() - t0, 2), observation=observation)
     res = _fill(res, task, seed, out_dir, code_path)
     _write_json(os.path.join(out_dir, "result.json"), res)
     return res
@@ -218,10 +219,11 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--fast", action="store_true", help="no mp4: trajectory + key frames + poster only")
     ap.add_argument("--no-live", action="store_true")
+    ap.add_argument("--observation", default="telemetry", choices=["telemetry", "oracle"])
     ap.add_argument("--response-sha256", default=None, help="sha256 of the code block in the model reply")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    res = worker(a.task, a.seed, a.code, a.out, a.fast, not a.no_live, a.response_sha256)
+    res = worker(a.task, a.seed, a.code, a.out, a.fast, not a.no_live, a.response_sha256, a.observation)
     print(json.dumps({k: res[k] for k in ("task", "seed", "success", "time_s", "error", "wall_s")}))
 
 

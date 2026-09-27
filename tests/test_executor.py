@@ -27,7 +27,7 @@ def _check_keys(res, out):
 
 def test_reference_policy_success_with_video(tmp_path):
     out = str(tmp_path / "attempt_1")
-    res = run_policy(REFERENCE, "can_to_bin", 0, out)
+    res = run_policy(REFERENCE, "can_to_bin", 0, out, observation="oracle")
     _check_keys(res, out)
     assert res["success"] is True and res["error"] is None
     assert res["calls"] and res["calls"][0] == "open_gripper()"
