@@ -97,6 +97,37 @@ Writes real-shaped episodes (marked `"fixture": true` in `extra`, so they are
 never mistaken for measured data) so the GBrain side can be developed and tested
 against the real schema today.
 
+### Feeding the GBrain side directly
+
+Its `FileMemorable` reads a JSON array of episodes and `config.memorableFixture`
+is overridable, so this output is a drop-in — no mapping changes on its side:
+
+```sh
+python -m memorable_layer gbrain-rows > gbrain/fixtures/episodes.json
+cd gbrain && MEMORABLE_FIXTURE=fixtures/episodes.json bun src/cli.ts after-race race-1 --print
+```
+
+Verified against the merged GBrain code: 80 episodes mapped through its `fromRow`
+with zero malformed fields, `standingsFrom` ranking the strategy that landed
+throws first, `scenarioOf` bucketing, `raceEpisodes` evidence, and a full
+`after-race` run producing a verdict page, links, a timeline entry and a
+benchmark.
+
+`gbrain-rows --contract` applies the filter its `raceEpisodes` documents (the
+winner's successes plus everyone else's failures) instead of every attempt, and
+`gbrain-result` gives the `RaceResult` standings the verdict page takes.
+
+Two things that have to be agreed across the seam, not solved in code:
+
+* **Strategy ids must match the skill directories.** `skillopt` reads
+  `skills/<strategy>/SKILL.md`, so the race and the skills folder have to use one
+  set of names. This layer accepts any string.
+* **Skillopt needs at least 15 scenarios with a success** (`config.minTasks`, for
+  `--split 1:1:1`). A scenario is a trash type plus a bin position snapped to
+  0.5 m and 15°, so the race has to vary distance, bearing and trash type enough
+  to produce them. Four races of four strategies against one bin position yields
+  four tasks, and its CLI warns rather than failing.
+
 ## Isolation
 
 One QM scope is one Memorable namespace, pinned with `MEMORABLE_HOME`: the CLI
