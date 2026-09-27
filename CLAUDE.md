@@ -32,15 +32,17 @@ robot_race/
   scene.py        DONE   MjSpec: Panda + tcp site + table + bin + one trash item + cameras (front/side/top)
   tasks.py        DONE   TASKS, Env (step, metrics, video frames, success check, result())
   robot.py        DONE   SimRobot: API_DOC implemented with damped-least-squares IK on the 7 arm joints
-  fake_robot.py   TODO   FakeRobot stub (same methods, canned state, logs calls)
-  executor.py     TODO   run one attempt in a subprocess -> result.json + GIF/MP4 + key frames
-  agent.py        TODO   Claude retry loop
-  viewer.py       TODO   runs/<id>/index.html gallery of attempts
+  fake_robot.py   DONE   FakeRobot stub (same methods, canned state, logs calls)
+  executor.py     DONE   run one attempt in a subprocess -> result.json + trajectory + MP4 + key frames
+  replay.py       DONE   re-render any attempt from its trajectory (HD, any camera)
+  agent.py        DONE   Claude retry loop
+  viewer.py       DONE   runs/<id>/index.html gallery + runs/index.json manifest
+  serve.py        DONE   dev HTTP server + /api/runs for the website (Range, CORS)
 policies/reference_pick_and_drop.py  DONE  scripted top-down grasp -> carry -> release
 scripts/fetch_assets.sh              DONE
 scripts/check_reference.py           DONE  reference policy x 5 tasks x 10 seeds, no video (~1 min)
-run_policy.py     TODO   CLI: run a policy file on N seeds in parallel
-run_agent.py      TODO   CLI: run the agent loop
+run_policy.py     DONE   CLI: run a policy file on N seeds in parallel
+run_agent.py      DONE   CLI: run the agent loop
 ```
 
 ## 3. Contracts (don't change without the team)
@@ -152,7 +154,7 @@ runs/
 ```
 
 - `result.json["media"]` = relative paths: `{"video", "poster", "keyframes": [...], "trajectory", "live"}`
-  (missing entries = null). `frames`/`video` keys keep pointing at key frames / attempt.mp4.
+  (missing entries = null). `frames`/`video`/`code_path` are also relative to the attempt dir (never absolute: this JSON is public).
 - `events.jsonl` types: `run_started`, `attempt_started`, `code_generated`, `attempt_finished`,
   `run_finished`. Every event has `ts` (unix float), `type`, `run_id`, `attempt` (null for run-level).
   `attempt_finished` embeds the result dict; `run_finished` has `status` ("solved"|"failed"|"error"), `solved_at`.

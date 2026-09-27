@@ -169,7 +169,7 @@ def run_info(run_dir: str) -> dict | None:
         solved_at=s.get("solved_at"),
         n_attempts=n_att,
         created_at=_created_at(run_dir, summary),
-        kind="agent" if summary is not None else "policy",
+        kind=(summary or {}).get("kind") or ("agent" if summary is not None else "policy"),
         n_success=len(ok),
         seeds=seeds,
         best=best,

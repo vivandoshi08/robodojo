@@ -32,7 +32,7 @@ def test_reference_policy_success_with_video(tmp_path):
     assert res["success"] is True and res["error"] is None
     assert res["calls"] and res["calls"][0] == "open_gripper()"
     mp4 = os.path.join(out, "attempt.mp4")
-    assert os.path.getsize(mp4) > 0 and res["video"] == mp4 and res["media"]["video"] == "attempt.mp4"
+    assert os.path.getsize(mp4) > 0 and res["video"] == "attempt.mp4" and res["media"]["video"] == "attempt.mp4"
     for name in ["poster.jpg", "trajectory.npz", "policy.py", "live.jpg"] + [f"key_{i}.png" for i in range(4)]:
         assert os.path.exists(os.path.join(out, name)), name
     assert res["media"]["keyframes"] == [f"key_{i}.png" for i in range(4)] and len(res["frames"]) == 4

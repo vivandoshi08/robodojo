@@ -41,14 +41,14 @@ def _media(out_dir: str) -> dict:
 def _fill(res: dict, task: str, seed: int, out_dir: str, code_path: str) -> dict:
     """Ensures every contract key is present (unknown physics = None)."""
     base = {k: None for k in RESULT_KEYS}
-    base.update(task=task, seed=seed, success=False, frames=[], code_path=code_path,
+    base.update(task=task, seed=seed, success=False, frames=[], code_path=os.path.basename(code_path),
                 item_final_pos=None, calls=[], wall_s=None)
     base.update(res)
     base["media"] = res.get("media") or _media(out_dir)
     if not base["frames"]:
-        base["frames"] = [os.path.join(out_dir, k) for k in base["media"]["keyframes"]]
+        base["frames"] = list(base["media"]["keyframes"])
     if base["video"] is None and base["media"]["video"]:
-        base["video"] = os.path.join(out_dir, base["media"]["video"])
+        base["video"] = base["media"]["video"]
     return base
 
 
@@ -133,9 +133,9 @@ def worker(task: str, seed: int, code_path: str, out_dir: str, fast: bool = Fals
     except Exception:
         traceback.print_exc()  # media stays null; the physics result is still valid
     media = _media(out_dir)
-    res.update(error=error, calls=robot.call_log, code_path=code_path, media=media,
-               frames=[os.path.join(out_dir, k) for k in media["keyframes"]],
-               video=os.path.join(out_dir, media["video"]) if media["video"] else None,
+    # Paths are relative to out_dir: result.json is served to a public site, so no local absolute paths.
+    res.update(error=error, calls=robot.call_log, code_path=os.path.basename(code_path), media=media,
+               frames=list(media["keyframes"]), video=media["video"],
                wall_s=round(time.time() - t0, 2))
     res = _fill(res, task, seed, out_dir, code_path)
     _write_json(os.path.join(out_dir, "result.json"), res)
