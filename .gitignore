@@ -219,5 +219,6 @@ __marimo__/
 
 # Robot Race
 runs/
+runs_demo/
 assets/menagerie/
 .claude/worktrees/

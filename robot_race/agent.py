@@ -21,11 +21,14 @@ from pathlib import Path
 
 from .interfaces import API_DOC
 from .tasks import TASKS
+from .viewer import hint_labels, is_hinted
 
 DEFAULT_MODEL = "claude-sonnet-5"  # pinned for reproducible races; override with ANTHROPIC_MODEL
 MAX_TOKENS = 8192
 API_RETRIES = 3               # our retries on top of the SDK's own (max_retries=2)
 REPO = Path(__file__).resolve().parent.parent
+# Hand-written solution. Reaches the model ONLY with example=True (--example), which is recorded in
+# summary.json["hints"] and shown as a banner on trace.html / the run pages. Never used otherwise.
 REFERENCE_POLICY = REPO / "policies" / "reference_pick_and_drop.py"
 FEEDBACK_KEYS = ["success", "error", "time_s", "collisions", "energy_j", "item_final_pos", "lifted", "dropped"]
 _sleep = time.sleep           # patched in tests
@@ -306,6 +309,24 @@ def make_client():
     return anthropic.Anthropic(max_retries=2, default_headers={"anthropic-workspace-id": ws} if ws else None)
 
 
+def is_scripted_client(client) -> bool:
+    """True when the caller injected a client that is not a real anthropic.Anthropic (a scripted/fake model).
+    None = run_agent_loop creates the real client itself (make_client) -> False."""
+    if client is None:
+        return False
+    try:
+        import anthropic
+        return not isinstance(client, (anthropic.Anthropic, anthropic.AnthropicBedrock, anthropic.AnthropicVertex))
+    except (ImportError, AttributeError):
+        return True
+
+
+def make_hints(example: bool, strategy: str | None, context: str | None) -> dict:
+    """Everything beyond the environment (task text, API_DOC, state, images) that reached the model.
+    All default off; summary.json["hints"]."""
+    return {"example": bool(example), "strategy": (strategy or "").strip() or None, "context": bool(context)}
+
+
 def _load_env() -> None:
     from dotenv import find_dotenv, load_dotenv
     load_dotenv(find_dotenv(usecwd=True))
@@ -382,12 +403,15 @@ def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = 
     log = print if verbose else (lambda *a, **k: None)
     _load_env()
     model = model or os.environ.get("ANTHROPIC_MODEL") or DEFAULT_MODEL
+    scripted = is_scripted_client(client)  # decided before we create the real client ourselves
     client = client or make_client()
+    hints = make_hints(example, strategy, context)
     runs_root = Path(runs_dir)
     run_dir = _make_run_dir(runs_root, run_id, task, seed, strategy)
     summary = dict(run_id=run_dir.name, task=task, seed=seed, model=model, strategy=strategy or "",
                    status="running", solved_at=None, created_at=time.time(), tries=tries, fast=fast,
-                   example=example, context=bool(context), error=None, attempts=[],
+                   example=example, context=bool(context), hints=hints, hinted=is_hinted(hints),
+                   scripted=scripted, error=None, attempts=[],
                    transcript="transcript.jsonl", trace="trace.html", observation=None,
                    usage={"input_tokens": 0, "output_tokens": 0,
                           "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0})
@@ -395,9 +419,13 @@ def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = 
     transcript = Transcript(run)
     run.save()
     run.event("run_started", task=task, seed=seed, model=model, strategy=summary["strategy"], tries=tries,
-              fast=fast)
+              fast=fast, hints=hints, scripted=scripted)
     _refresh_viewer(run_dir, runs_root)
     log(f"run {summary['run_id']}  model={model}  -> {run_dir}")
+    if scripted:
+        log("  SCRIPTED: injected client, not the Anthropic API (summary.scripted = true)")
+    if summary["hinted"]:
+        log(f"  HINTED: {hint_labels(hints)}")
 
     try:
         state, images = observe_scene(task, seed)

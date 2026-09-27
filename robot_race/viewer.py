@@ -171,6 +171,9 @@ def run_info(run_dir: str) -> dict | None:
         n_attempts=n_att,
         created_at=_created_at(run_dir, summary),
         kind=(summary or {}).get("kind") or ("agent" if summary is not None else "policy"),
+        hints=hints_of(summary),
+        hinted=is_hinted(hints_of(summary)),
+        scripted=bool(s.get("scripted")),
         n_success=len(ok),
         seeds=seeds,
         best=best,
@@ -179,6 +182,59 @@ def run_info(run_dir: str) -> dict | None:
         done=done,
         live=live,
     )
+
+
+# ---------------------------------------------------------------- integrity flags
+
+def is_hinted(hints: dict | None) -> bool:
+    """summary.json["hints"] -> did anything beyond the environment reach the model?"""
+    h = hints if isinstance(hints, dict) else {}
+    return bool(h.get("example") or h.get("strategy") or h.get("context"))
+
+
+def hint_labels(hints: dict | None) -> list[str]:
+    """Human-readable list for banners, e.g. ["reference example in prompt"]."""
+    h, out = (hints if isinstance(hints, dict) else {}), []
+    if h.get("example"):
+        out.append("reference example in prompt")
+    if h.get("strategy"):
+        out.append(f"strategy card: {h['strategy']}")
+    if h.get("context"):
+        out.append("recalled memory (context file) in prompt")
+    return out
+
+
+def hints_of(summary: dict | None) -> dict | None:
+    """summary["hints"]; older agent summaries only had top-level example/strategy/context. None for policy runs."""
+    s = summary if isinstance(summary, dict) else None
+    if s is None or s.get("kind") == "policy":
+        return None
+    if isinstance(s.get("hints"), dict):
+        return s["hints"]
+    return {"example": bool(s.get("example")), "strategy": s.get("strategy") or None,
+            "context": bool(s.get("context"))}
+
+
+def integrity_banners(summary: dict | None, kind: str | None = None) -> list[tuple[str, str]]:
+    """[(css class, text)] for the top of trace.html / run pages / home cards. Empty = a clean model run."""
+    s, out = (summary if isinstance(summary, dict) else {}), []
+    if kind == "policy" or s.get("kind") == "policy":
+        out.append(("warn", "HAND-WRITTEN POLICY, NOT A MODEL"))
+    if s.get("scripted"):
+        out.append(("warn", "SCRIPTED DEMO, NOT A MODEL"))
+    labels = hint_labels(hints_of(s))
+    if labels:
+        out.append(("hint", "Hint given: " + "; ".join(labels)))
+    return out
+
+
+def banners_html(summary: dict | None, kind: str | None = None) -> str:
+    return "".join(f'<div class="banner {c}">{_e(t)}</div>' for c, t in integrity_banners(summary, kind))
+
+
+BANNER_CSS = """.banner{font-weight:700;padding:6px 10px;border-radius:6px;margin:6px 0;color:#fff;font-size:13px}
+.banner.warn{background:var(--bad)}.banner.hint{background:var(--run)}
+"""
 
 
 # ---------------------------------------------------------------- HTML
@@ -208,7 +264,7 @@ header{margin-bottom:16px}.meta span{margin-right:14px;white-space:nowrap}
 pre{background:var(--code);border:1px solid var(--bd);border-radius:6px;padding:8px;overflow:auto;
 font-size:12px;max-height:360px;white-space:pre-wrap;word-break:break-word}
 pre.err{border-color:var(--bad)}details{margin-top:6px}summary{cursor:pointer;color:var(--mut)}
-"""
+""" + BANNER_CSS
 
 
 def _page(title: str, body: str, refresh: bool = False) -> str:
@@ -311,6 +367,7 @@ def write_index(run_dir: str) -> str:
     cards += [_card(run_dir, n, None, codes.get(n), live=True) for n in live]
     body = (f'<header><div class="top"><h1>{_e(run_id)}</h1>{_badge(status, status)}</div>'
             f'<div class="meta">{meta_html}</div>'
+            + banners_html(s, (info or {}).get("kind")) +
             f'<div class="mut"><a href="../index.html">all runs</a>'
             + (' · <a href="trace.html">audit trace</a> (exact model inputs/outputs + provenance)'
                if os.path.isfile(os.path.join(run_dir, "trace.html")) else "")
@@ -348,7 +405,7 @@ def _manifest_entry(runs_root: str, info: dict) -> dict:
         poster = f'{info["run_id"]}/{info["best"]}/{still}' if still else None
         video = f'{info["run_id"]}/{info["best"]}/{vid}' if vid else None
     keys = ["run_id", "task", "seed", "model", "strategy", "status", "solved_at", "n_attempts", "created_at",
-            "kind", "n_success", "seeds", "best"]
+            "kind", "hints", "hinted", "scripted", "n_success", "seeds", "best"]
     e = {k: info[k] for k in keys}
     e["best_attempt"] = e.pop("best")
     e.update(poster=poster, video=video)
@@ -383,6 +440,7 @@ def write_runs_home(runs_root: str = "runs", manifest: list[dict] | None = None)
             f'<div class="media">{img}</div><div class="body">'
             f'<div class="top"><strong>{_e(e["run_id"])}</strong>{_badge(e["status"], e["status"])}</div>'
             f'<div class="mut">{_e(" · ".join(str(x) for x in sub if x not in (None, "")))}</div>'
+            + banners_html({"scripted": e.get("scripted"), "hints": e.get("hints")}, e["kind"])
             + (f'<div class="mut">{_e(e["strategy"])}</div>' if e["strategy"] else "")
             + "</div></a>")
     running = any(e["status"] == "running" for e in manifest)
