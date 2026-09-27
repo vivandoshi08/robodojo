@@ -404,8 +404,12 @@ def _make_run_dir(runs_dir: Path, run_id: str | None, task: str, seed: int, stra
 def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = None, context: str | None = None,
                    example: bool = False, fast: bool = False, run_id: str | None = None, runs_dir: str = "runs",
                    client=None, timeout_s: float = 180, model: str | None = None, verbose: bool = True,
-                   observation: str = "telemetry") -> dict:
-    """Run the Claude retry loop; returns the final summary dict (also at runs/<run_id>/summary.json)."""
+                   observation: str = "telemetry", race: dict | None = None, on_attempt=None) -> dict:
+    """Run the Claude retry loop; returns the final summary dict (also at runs/<run_id>/summary.json).
+
+    race: {race_id, agent_id, strategy_name} when this loop is one racer (run_race.py); stored as
+    summary["race"] and used for the run-id slug. on_attempt(k, result, attempt_dir): called after each
+    attempt's result.json is written (e.g. racetrack's Tracker.record_attempt); its errors never stop the run."""
     if task not in TASKS:
         raise KeyError(f"unknown task {task!r}; choose from {list(TASKS)}")
     log = print if verbose else (lambda *a, **k: None)
@@ -415,11 +419,12 @@ def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = 
     client = client or make_client()
     hints = make_hints(example, strategy, context, observation)
     runs_root = Path(runs_dir)
-    run_dir = _make_run_dir(runs_root, run_id, task, seed, strategy)
+    run_dir = _make_run_dir(runs_root, run_id, task, seed,
+                            (race or {}).get("strategy_name") or (race or {}).get("agent_id") or strategy)
     summary = dict(run_id=run_dir.name, task=task, seed=seed, model=model, strategy=strategy or "",
                    status="running", solved_at=None, created_at=time.time(), tries=tries, fast=fast,
                    example=example, context=bool(context), hints=hints, hinted=is_hinted(hints),
-                   scripted=scripted, error=None, attempts=[],
+                   scripted=scripted, error=None, attempts=[], race=race,
                    transcript="transcript.jsonl", trace="trace.html", observation=None,
                    observation_mode=observation,
                    usage={"input_tokens": 0, "output_tokens": 0,
@@ -468,6 +473,11 @@ def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = 
                 summary.update(status="solved", solved_at=k)
             run.save()
             run.event("attempt_finished", k, result=result)
+            if on_attempt is not None:
+                try:
+                    on_attempt(k, result, adir)
+                except Exception as e:  # noqa: BLE001  (a tracker hook must never kill the run)
+                    log(f"  on_attempt error: {type(e).__name__}: {e}")
             _refresh_viewer(run_dir, runs_root)
             err = (result.get("error") or "").strip().splitlines()
             log(f"[{k}/{tries}] {'SUCCESS' if result.get('success') else 'fail   '} "
