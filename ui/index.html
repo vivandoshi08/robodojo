@@ -49,6 +49,13 @@
   --hit:#6FE3C4;
   --miss:#FF7D92;
 
+  /* one accent per fighting style, used by the mats, the scorecard and
+     the training journal so a style is recognisable in all three */
+  --s-place:#8FA6FF;
+  --s-drop:#5FD0FF;
+  --s-toss:#E9B84C;
+  --s-push:#C79BFF;
+
   --display:"Instrument Serif","Iowan Old Style",Georgia,serif;
   --body:"Inter","Helvetica Neue",Arial,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -85,8 +92,8 @@ header{position:relative;display:grid;grid-template-columns:1fr auto;align-items
   -webkit-mask-image:linear-gradient(115deg,transparent 18%,#000 55%,transparent 88%);mask-image:linear-gradient(115deg,transparent 18%,#000 55%,transparent 88%)}
 .dots.fine{background-size:5px 5px;opacity:.10;-webkit-mask-image:linear-gradient(115deg,transparent 45%,#000 70%,transparent 100%);mask-image:linear-gradient(115deg,transparent 45%,#000 70%,transparent 100%)}
 .titleblock{position:relative;z-index:1}
-h1{font-family:var(--display);font-weight:400;font-size:clamp(58px,10.5vw,142px);line-height:.86;margin:0;
-  letter-spacing:-.018em;
+h1{font-family:var(--display);font-weight:400;font-size:clamp(58px,10.5vw,142px);line-height:.86;
+  margin:0 0 -.1em;padding-bottom:.14em;letter-spacing:-.018em;
   background:linear-gradient(168deg,#FFFFFF 4%,var(--riso) 58%,var(--riso-deep) 104%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 12px 34px rgba(59,87,228,.42))}
@@ -127,6 +134,8 @@ button:active{transform:translateY(1px)}
   transition:box-shadow .3s,border-color .3s,transform .3s}
 .mat::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
   background:linear-gradient(150deg,rgba(255,255,255,.16),transparent 38%);opacity:.7}
+.mat::after{content:"";position:absolute;left:18px;right:18px;top:0;height:2px;border-radius:0 0 99px 99px;
+  background:var(--s);opacity:.85;pointer-events:none}
 .mat:hover{transform:translateY(-2px);border-color:var(--glass-brd-lit)}
 .mat.hit{border-color:color-mix(in srgb,var(--hit) 60%,transparent);
   box-shadow:var(--glass-hi),var(--glass-sh),0 0 34px -6px color-mix(in srgb,var(--hit) 70%,transparent)}
@@ -140,9 +149,16 @@ button:active{transform:translateY(1px)}
 .belt{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
   text-transform:uppercase;color:var(--ink-soft);white-space:nowrap}
 .belt i{display:inline-block;width:30px;height:9px;border-radius:2px;border:1px solid rgba(255,255,255,.35)}
-.mat svg{position:relative;z-index:1;display:block;width:100%;height:auto;margin:12px 0 8px;
-  background:var(--bp);border:1px solid rgba(255,255,255,.12);border-radius:12px;
+.screen{position:relative;z-index:1;margin:12px 0 8px;border-radius:12px;overflow:hidden;
+  background:var(--bp);border:1px solid rgba(255,255,255,.12);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 0 44px rgba(0,0,0,.5)}
+.mat svg,.screen video{display:block;width:100%;height:auto}
+.screen video{aspect-ratio:330/180;object-fit:cover;background:var(--bp)}
+.screen-tag{position:absolute;z-index:2;top:8px;right:9px;padding:2px 9px;border-radius:99px;
+  font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-soft);background:rgba(4,8,20,.62);border:1px solid rgba(255,255,255,.14);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.screen.live .screen-tag{color:#04220F;background:linear-gradient(168deg,#9BF0D8,var(--hit));border-color:rgba(255,255,255,.38)}
 .caption{position:relative;z-index:1;font-size:12.5px;color:var(--ink-soft);min-height:1.5em;margin:0;font-weight:300}
 .stats{position:relative;z-index:1;display:flex;gap:20px;margin-top:9px;font-size:11px;font-family:var(--mono);
   letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft);
@@ -168,23 +184,41 @@ th,td{text-align:left;padding:7px 4px;border-bottom:1px solid rgba(255,255,255,.
 th{font-weight:500;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 td.num{font-family:var(--mono)}
-tbody tr:first-child td{color:var(--riso);font-weight:600}
+tbody tr:first-child td{color:var(--ink);font-weight:600}
+td .dot{display:inline-block;width:7px;height:7px;border-radius:99px;margin-right:9px;vertical-align:middle;
+  box-shadow:0 0 10px -1px currentColor}
 .verdict{margin:14px 0 0;padding:12px 14px;border-radius:12px;font-size:13.5px;color:var(--ink);font-weight:300;
   background:linear-gradient(158deg,rgba(143,166,255,.20),rgba(143,166,255,.07));
   border:1px solid rgba(143,166,255,.3);border-left:3px solid var(--riso);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
 .verdict:empty{display:none}
 
+/* The journal is Memorable's surface, so it is deliberately a different
+   material from the glass cards: a recessed, ruled ledger. */
+.card.ledger{background:linear-gradient(158deg,rgba(5,9,22,.78),rgba(5,9,22,.58));
+  border-color:rgba(255,255,255,.08);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07),inset 0 0 60px rgba(0,0,0,.55),var(--glass-sh)}
+.card.ledger::before{opacity:.2}
+.card.ledger h3{display:flex;align-items:baseline;gap:10px}
+.card.ledger h3::after{content:"memorable";font-family:var(--mono);font-size:9px;font-weight:600;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);opacity:.8}
 .journal{max-height:380px;overflow-y:auto;margin:0 -4px;padding:0 4px;
   scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
 .journal::-webkit-scrollbar{width:7px}
 .journal::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:99px}
-.entry{display:grid;grid-template-columns:20px 1fr;gap:8px;padding:9px 0;
-  border-bottom:1px solid rgba(255,255,255,.07);font-size:13px;font-weight:300;color:var(--ink-soft)}
+.entry{display:grid;grid-template-columns:20px 1fr;gap:8px;padding:9px 0 9px 11px;
+  border-bottom:1px solid rgba(255,255,255,.06);border-left:2px solid var(--s,rgba(255,255,255,.14));
+  font-size:13px;font-weight:300;color:var(--ink-soft)}
+.entry[data-strat="place"]{--s:var(--s-place)}
+.entry[data-strat="drop"]{--s:var(--s-drop)}
+.entry[data-strat="toss"]{--s:var(--s-toss)}
+.entry[data-strat="push"]{--s:var(--s-push)}
+.entry .rnd{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;
+  color:var(--ink-soft);opacity:.75;margin-left:6px}
 .entry .mark{font-weight:600;font-size:14px;line-height:1.4}
 .entry.ok .mark{color:var(--hit)}
 .entry.bad .mark{color:var(--miss)}
-.entry .who{font-weight:500;color:var(--ink)}
+.entry .who{font-weight:500;color:var(--s,var(--ink))}
 .entry .why{color:var(--ink-soft)}
 .entry.bad .why{color:color-mix(in srgb,var(--miss) 68%,var(--ink))}
 .entry .recall{display:inline-block;margin-top:4px;padding:2px 9px;border-radius:999px;font-size:11px;
@@ -236,10 +270,99 @@ tbody tr:first-child td{color:var(--riso);font-weight:600}
 .beltcard p{margin:0 0 4px;font-size:12.5px;font-weight:300;color:var(--ink-soft)}
 .beltcard p b{color:var(--ink);font-weight:500}
 
+/* ---------------- the gate: the dojo opens ----------------
+   A pair of shoji screens closed over the page. The title, the promise
+   and the sponsors sit on them; "Enter the dojo" slides them apart and
+   the sparring floor is behind. ?nogate=1 skips it while iterating. */
+.gate{position:fixed;inset:0;z-index:100;display:grid;place-items:center;overflow:hidden;background:var(--void);
+  transition:opacity .55s ease 1s,visibility 0s linear 1.55s}
+.gate.open{opacity:0;visibility:hidden;pointer-events:none}
+.gate[hidden]{display:none}
+.gate-glow{position:absolute;top:50%;left:50%;width:min(64vw,760px);height:130vh;translate:-50% -50%;
+  background:radial-gradient(closest-side,rgba(233,184,76,.26),rgba(59,87,228,.18) 46%,transparent 74%);
+  filter:blur(26px);animation:breathe 6s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.07)}}
+
+.shoji{position:absolute;top:-2%;bottom:-2%;width:50.3%;z-index:1;
+  background:
+    repeating-linear-gradient(to right,transparent 0 calc(100%/6 - 2px),rgba(214,192,148,.26) calc(100%/6 - 2px) calc(100%/6)),
+    repeating-linear-gradient(to bottom,transparent 0 84px,rgba(214,192,148,.26) 84px 86px),
+    linear-gradient(180deg,#131B37,#080E22);
+  box-shadow:inset 0 0 140px rgba(0,0,0,.85);
+  transition:transform 1.5s cubic-bezier(.76,0,.24,1)}
+.shoji.left{left:0;border-right:3px solid rgba(214,192,148,.42)}
+.shoji.right{right:0;border-left:3px solid rgba(214,192,148,.42)}
+.gate.open .shoji.left{transform:translateX(-101%)}
+.gate.open .shoji.right{transform:translateX(101%)}
+
+.petals{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+.petal{position:absolute;top:-8vh;width:10px;height:10px;opacity:0;
+  border-radius:12px 2px 12px 2px;background:linear-gradient(140deg,#F8CCDA,#E2839F);
+  animation:fall linear infinite}
+@keyframes fall{
+  0%{opacity:0;transform:translate3d(0,-8vh,0) rotate(0)}
+  9%{opacity:.7}
+  88%{opacity:.45}
+  100%{opacity:0;transform:translate3d(var(--dx,50px),114vh,0) rotate(560deg)}}
+
+.gate-inner{position:relative;z-index:3;text-align:center;padding:28px 24px;max-width:min(94vw,820px);
+  transition:opacity .45s ease,transform .7s cubic-bezier(.3,0,.2,1)}
+.gate.open .gate-inner{opacity:0;transform:translateY(-20px) scale(.97)}
+.gate-inner>*{animation:rise .95s cubic-bezier(.2,.75,.2,1) both}
+.gate-kicker{animation-delay:.05s}
+.gate-title{animation-delay:.16s}
+.gate-sub{animation-delay:.3s}
+.gate-enter{animation-delay:.44s}
+.sponsors{animation-delay:.58s}
+@keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+.gate-kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.32em;text-transform:uppercase;
+  color:var(--gold);margin:0 0 20px}
+.gate-title{font-family:var(--display);font-weight:400;font-size:clamp(66px,13vw,152px);line-height:.85;
+  margin:0 0 -.1em;padding-bottom:.14em;letter-spacing:-.02em;
+  background:linear-gradient(168deg,#FFFFFF 4%,var(--riso) 56%,var(--riso-deep) 106%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 16px 46px rgba(59,87,228,.5))}
+.gate-sub{color:#BAC4DE;font-weight:300;font-size:16px;margin:22px auto 32px;max-width:46ch}
+.gate-enter{padding:14px 36px;font-size:16px}
+
+.sponsors{margin-top:46px;padding-top:24px;border-top:1px solid rgba(255,255,255,.1)}
+.sponsors-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:#AFBAD6;margin:0 0 18px}
+.sponsors ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;justify-content:center;gap:18px 30px}
+.sponsors li{display:flex;flex-direction:column;gap:5px}
+.sponsors b{font-family:var(--display);font-weight:400;font-size:22px;letter-spacing:.01em;color:var(--ink);
+  white-space:nowrap}
+.sponsors span{font-family:var(--mono);font-size:10.5px;font-weight:400;letter-spacing:.1em;
+  text-transform:uppercase;color:#B7C1DB;white-space:nowrap}
+@media (max-width:560px){.sponsors ul{gap:16px 20px}.sponsors b{font-size:18px}.sponsors span{font-size:9.5px}}
+
+@media (prefers-reduced-motion:reduce){
+  .petals{display:none}
+  .gate-glow{animation:none}
+  .gate-inner>*{animation:none}
+}
+
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
+<div class="gate" id="gate">
+  <div class="gate-glow" aria-hidden="true"></div>
+  <div class="shoji left" aria-hidden="true"></div>
+  <div class="shoji right" aria-hidden="true"></div>
+  <div class="petals" id="petals" aria-hidden="true"></div>
+  <div class="gate-inner">
+    <p class="gate-kicker">Robot strategy training</p>
+    <h1 class="gate-title">Robo<br>Dojo</h1>
+    <p class="gate-sub">Four strategies spar on the same trash-into-bin task. The sensei scores every match, and the winning technique is written to the scroll.</p>
+    <button type="button" class="primary gate-enter" id="enterBtn">Enter the dojo</button>
+    <div class="sponsors">
+      <p class="sponsors-label">Powered by</p>
+      <ul id="sponsorList"></ul>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
   <header>
     <div class="dots" aria-hidden="true"></div><div class="dots fine" aria-hidden="true"></div>
@@ -269,7 +392,7 @@ tbody tr:first-child td{color:var(--riso);font-weight:600}
         </table>
         <p class="verdict" id="verdict"></p>
       </div>
-      <div class="card">
+      <div class="card ledger">
         <h3>Training journal</h3>
         <div class="filter" id="journalFilter"></div>
         <div class="journal" id="journal"><p class="empty">No attempts yet. Start a sparring match and every hit and miss is recorded here, with the reason.</p></div>
@@ -330,10 +453,13 @@ const mats={};
 STRATS.forEach(s=>{
   const el=document.createElement('article');
   el.className='mat';
+  el.style.setProperty('--s',`var(--s-${s.id})`);
   el.innerHTML=`<span class="crown">Round champion</span>
   <div class="mat-head"><h2>${s.name}</h2><span class="belt" data-belt><i></i><span></span></span></div>
   <p class="desc">${s.desc}</p>
-  <svg viewBox="0 0 330 180" role="img" aria-label="${s.name} sandbox">
+  <div class="screen" data-screen>
+    <span class="screen-tag" data-screen-tag>Blueprint</span>
+    <svg viewBox="0 0 330 180" role="img" aria-label="${s.name} sandbox">
     <defs>
       <pattern id="g-${s.id}" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M10 0H0V10" fill="none" stroke="rgba(255,255,255,.13)" stroke-width=".6"/></pattern>
       <pattern id="h-${s.id}" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#F4F6FF" stroke-width="1"/></pattern>
@@ -361,12 +487,13 @@ STRATS.forEach(s=>{
       <line data-dimA y1="166" y2="174" x1="49" x2="49"/><line data-dimB y1="166" y2="174" x1="200" x2="200"/>
     </g>
     <text data-dist font-size="8.5" fill="rgba(232,237,255,.85)" text-anchor="middle" y="179" font-family="JetBrains Mono, ui-monospace, monospace" font-weight="600" letter-spacing=".08em"></text>
-  </svg>
+    </svg>
+  </div>
   <p class="caption" data-caption>Waiting on the mat</p>
   <div class="stats"><span><b data-in>0/0</b>in</span><span><b data-time>–</b>s avg</span><span><b data-knock>0</b>bins down</span></div>`;
   matsEl.appendChild(el);
   const q=a=>el.querySelector(`[${a}]`);
-  mats[s.id]={s,el,dim:q('data-dim'),dimB:q('data-dimB'),svg:q('data-arm').ownerSVGElement,item:q('data-item'),bin:q('data-bin'),dist:q('data-dist'),
+  mats[s.id]={s,el,screen:q('data-screen'),screenTag:q('data-screen-tag'),dim:q('data-dim'),dimB:q('data-dimB'),svg:q('data-arm').ownerSVGElement,item:q('data-item'),bin:q('data-bin'),dist:q('data-dist'),
     base:q('data-base'),l1:q('data-l1'),l2:q('data-l2'),j1:q('data-j1'),j2:q('data-j2'),grip:q('data-grip'),
     top:q('data-top'),leg:q('data-leg'),caption:q('data-caption'),in:q('data-in'),time:q('data-time'),knock:q('data-knock'),belt:q('data-belt'),
     gx:70,gy:100,baseX:s.id==='push'?16:34,binX:200,stats:null};
@@ -519,7 +646,7 @@ function updateMat(m){
 }
 function renderScore(){
   const rows=Object.values(mats).map(m=>({m,st:m.stats||{n:0,k:0,t:0,kn:0}})).sort((a,b)=>score(b.st)-score(a.st));
-  scoreBody.innerHTML=rows.map(({m,st})=>`<tr><td>${m.s.name}</td><td class="num">${st.k}/${st.n}</td><td class="num">${st.n?(st.t/st.n).toFixed(1)+' s':'–'}</td><td class="num">${st.kn}</td><td class="num"><b>${st.n?score(st):'–'}</b></td></tr>`).join('');
+  scoreBody.innerHTML=rows.map(({m,st})=>`<tr><td><span class="dot" style="color:var(--s-${m.s.id});background:var(--s-${m.s.id})"></span>${m.s.name}</td><td class="num">${st.k}/${st.n}</td><td class="num">${st.n?(st.t/st.n).toFixed(1)+' s':'–'}</td><td class="num">${st.kn}</td><td class="num"><b>${st.n?score(st):'–'}</b></td></tr>`).join('');
 }
 function renderJournal(){
   const list=records.filter(r=>journalFilter==='all'||r.strat===journalFilter).slice().reverse();
@@ -527,7 +654,7 @@ function renderJournal(){
   journal.innerHTML=list.slice(0,80).map(r=>{
     const s=STRATS.find(x=>x.id===r.strat);
     const recall=r.memo?`<span class="recall">Recalled ${r.memo} earlier miss${r.memo>1?'es':''} with ${TRASH[r.trash].label}</span>`:'';
-    return `<div class="entry ${r.ok?'ok':'bad'}"><span class="mark" aria-label="${r.ok?'Hit':'Miss'}">${r.ok?'✓':'✗'}</span><div><span class="who">${s.name}</span>, round ${r.round}: ${TRASH[r.trash].label} at ${r.dist} cm<br><span class="why">${r.why}</span>${recall}</div></div>`;
+    return `<div class="entry ${r.ok?'ok':'bad'}" data-strat="${r.strat}"><span class="mark" aria-label="${r.ok?'Hit':'Miss'}">${r.ok?'✓':'✗'}</span><div><span class="who">${s.name}</span><span class="rnd">R${r.round}</span><br>${TRASH[r.trash].label} at ${r.dist} cm — <span class="why">${r.why}</span>${recall}</div></div>`;
   }).join('');
 }
 function renderFilter(){
@@ -573,6 +700,64 @@ function renderBelts(){
       <p><b>${b.n}</b>, ${w} win${w===1?'':'s'}. ${r.n?`${r.k} of ${r.n} attempts in overall.`:'No attempts yet.'}</p><p>${next}</p></div>`;
   }).join('');
 }
+
+/* ---------- sponsors ----------
+   TODO confirm this list and the wording before the demo. These are the
+   tools the repo actually names (ui/README.md and CLAUDE.md); swap in the
+   real sponsor roster if it differs. Wordmarks are set in type on purpose,
+   so no logo assets are needed. */
+const SPONSORS=[
+  {name:'Anthropic', role:'Claude agents'},
+  {name:'QM',        role:'Sandboxes'},
+  {name:'Memorable', role:'Training journal'},
+  {name:'GBrain',    role:'The scroll'},
+  {name:'MuJoCo',    role:'Physics'},
+];
+
+/* ---------- the gate ---------- */
+const gate=document.getElementById('gate');
+document.getElementById('sponsorList').innerHTML=
+  SPONSORS.map(s=>`<li><b>${s.name}</b><span>${s.role}</span></li>`).join('');
+
+if(!reduce){
+  const petals=document.getElementById('petals');
+  petals.innerHTML=[...Array(14)].map((_,i)=>{
+    const dur=9+Math.random()*9, delay=-Math.random()*dur, left=Math.random()*100,
+      dx=(Math.random()*2-1)*140, size=7+Math.random()*7;
+    return `<span class="petal" style="left:${left}%;width:${size}px;height:${size}px;`+
+      `--dx:${dx.toFixed(0)}px;animation-duration:${dur.toFixed(1)}s;animation-delay:${delay.toFixed(1)}s"></span>`;
+  }).join('');
+}
+
+function openGate(){
+  if(gate.classList.contains('open'))return;
+  gate.classList.add('open');
+  setTimeout(()=>{gate.hidden=true;startBtn.focus({preventScroll:true})},reduce?0:1600);
+}
+document.getElementById('enterBtn').addEventListener('click',openGate);
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!gate.hidden)openGate()});
+if(new URLSearchParams(location.search).has('nogate')){gate.classList.add('open');gate.hidden=true}
+
+/* ---------- swapping a mat's blueprint for a real sim ----------
+   Each mat's preview lives in a .screen that a recorded attempt can take
+   over. media matches result.json["media"] from the web artifact contract
+   in CLAUDE.md: paths relative to runs/<run_id>/attempt_<k>/.
+     setSim('toss', {video:'runs/…/attempt_1/attempt.mp4',
+                     poster:'runs/…/attempt_1/poster.jpg'})
+   Call setSim(id, null) to drop back to the blueprint. */
+function setSim(stratId, media){
+  const m=mats[stratId]; if(!m)return;
+  const svg=m.screen.querySelector('svg'), old=m.screen.querySelector('video');
+  if(old)old.remove();
+  if(!media||!media.video){svg.style.display='';m.screen.classList.remove('live');m.screenTag.textContent='Blueprint';return}
+  const v=document.createElement('video');
+  v.src=media.video; if(media.poster)v.poster=media.poster;
+  v.autoplay=v.muted=v.loop=v.playsInline=true; v.setAttribute('playsinline','');
+  v.setAttribute('aria-label',`${m.s.name} attempt replay`);
+  svg.style.display='none'; m.screen.appendChild(v);
+  m.screen.classList.add('live'); m.screenTag.textContent='Live sim';
+}
+window.setSim=setSim;
 
 /* ---------- wiring ---------- */
 const startBtn=document.getElementById('startBtn'), roundLabel=document.getElementById('roundLabel'),
