@@ -24,7 +24,7 @@ from .tasks import TASKS
 from .viewer import hint_labels, is_hinted
 
 DEFAULT_MODEL = "claude-sonnet-5"  # pinned for reproducible races; override with ANTHROPIC_MODEL
-MAX_TOKENS = 8192
+MAX_TOKENS = 20000  # 8192 truncated long plans before the code block; >21333 needs streaming in the SDK
 API_RETRIES = 3               # our retries on top of the SDK's own (max_retries=2)
 REPO = Path(__file__).resolve().parent.parent
 # Hand-written solution. Reaches the model ONLY with example=True (--example), which is recorded in
@@ -125,12 +125,13 @@ def first_turn(task: str, state: dict, images: dict[str, str], context: str | No
 
 
 def feedback_turn(k: int, result: dict, attempt_dir: Path, no_code: bool = False,
-                  observation: str = "telemetry") -> list:
+                  observation: str = "telemetry", truncated: bool = False) -> list:
     fb = {key: result.get(key) for key in FEEDBACK_KEYS + (["item_final_pos"] if observation == "oracle" else [])}
     fb["calls_tail"] = (result.get("calls") or [])[-12:]
     content = [text_block(f"Attempt {k} result:\n```json\n{json.dumps(fb, default=str)}\n```")]
     if no_code:
-        content.append(text_block("Your reply had no ```python code block, so nothing ran."))
+        content.append(text_block("Your reply had no ```python code block, so nothing ran."
+                                  + (f" It was cut off at the {MAX_TOKENS}-token output limit." if truncated else "")))
     frames = _keyframes(result, attempt_dir)
     if frames:
         content.append(text_block("Key frames (front camera) at t = 0, 1/3, 2/3 and the end of the episode:"))
@@ -228,7 +229,7 @@ class Transcript:
     bytes of exactly that block (i = order of appearance in the request)."""
 
     def __init__(self, run: _Run):
-        self.run, self.n, self.cur = run, 0, None
+        self.run, self.n, self.cur, self.last_stop_reason = run, 0, None, None
         self.root = run.dir / "transcript"
 
     def _externalize(self, obj, d: Path, images: list):
@@ -280,6 +281,7 @@ class Transcript:
 
     def response(self, resp, usage: dict, errors: list) -> None:
         raw = _plain(resp)
+        self.last_stop_reason = _get(resp, "stop_reason")
         write_json_atomic(self.cur["dir"] / "response.json", raw)
         self._finish(dict(retries=len(errors), retry_errors=errors, model=_get(resp, "model"),
                           stop_reason=_get(resp, "stop_reason")),
@@ -475,7 +477,8 @@ def run_agent_loop(task: str, seed: int, tries: int = 5, strategy: str | None = 
                 break
             if k < tries:
                 messages.append({"role": "user", "content": feedback_turn(k, result, adir, no_code=code is None,
-                                                                            observation=observation)})
+                                                                            observation=observation,
+                                                                            truncated=transcript.last_stop_reason == "max_tokens")})
         if summary["status"] == "running":
             summary["status"] = "failed"
     except Exception as e:  # noqa: BLE001  (API hard failure, scene build, ...): mark the run, re-raise nothing
