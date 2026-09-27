@@ -301,7 +301,9 @@ def make_client():
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set: put ANTHROPIC_API_KEY=sk-ant-... in .env "
                            "(repo root) or export it.")
-    return anthropic.Anthropic(max_retries=2)
+    # Keys not scoped to a workspace must name one per request (API error otherwise).
+    ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+    return anthropic.Anthropic(max_retries=2, default_headers={"anthropic-workspace-id": ws} if ws else None)
 
 
 def _load_env() -> None:

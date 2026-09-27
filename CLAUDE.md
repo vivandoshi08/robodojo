@@ -72,6 +72,7 @@ Steps A-D can run in parallel (different files). E is last.
   render key frames, poster and (unless fast) `attempt.mp4` from the trajectory via `replay.py`. No GIF.
 
 **B. agent.py + run_agent.py** (parallel; build against FakeRobot / a canned result until A lands)
+- Workspace: `ANTHROPIC_WORKSPACE_ID` (optional) is sent as the `anthropic-workspace-id` header; required when the API key is not scoped to a workspace.
 - Model: `ANTHROPIC_MODEL` env var, else `claude-sonnet-5` (pinned so races compare strategies, not models).
 - System prompt: short role line + `API_DOC` + output rules (one ```python block defining
   `run(robot)`, only `robot`/`np`/`math`, no imports of other modules, no I/O).
