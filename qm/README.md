@@ -49,7 +49,11 @@ export QM_DEV_ENV="$PWD/qm/dev.env"
 (cd ../qm && npm run dev-instance:doctor)          # if anything looks off
 ```
 
-5. Import the skill: Admin UI → Skill packs → register this repo (glob `qm/skills/*/SKILL.md`), import `robodojo-race`.
+5. Import the skill: Admin UI → Skill packs → Register (repo is public, no credential needed):
+   - URL `https://github.com/vivandoshi08/robodojo`
+   - Ref: a pinned commit on the branch that has `qm/skills/` (`git rev-parse HEAD`)
+   - Config `{"skillGlobs": ["qm/skills/*"]}` (keeps out `gbrain/skills/arc-toss`, which isn't a QM skill)
+   - Browse → select `robodojo-race` → Import. Re-import with a new ref after editing the skill.
 6. In the web UI: "Race all strategies on can_to_bin seed 0". Afterwards `bash qm/collect_runs.sh`.
 
 ## Files
