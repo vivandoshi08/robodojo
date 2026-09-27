@@ -1,0 +1,10 @@
+.git
+.venv
+.env
+runs
+assets
+gbrain
+**/__pycache__
+.claude
+*.zip
+*.gif

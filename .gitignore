@@ -227,3 +227,6 @@ races/
 racetrack.db
 runs_backup.jsonl
 plan.json
+
+# QM local config (has API key)
+qm/dev.env
