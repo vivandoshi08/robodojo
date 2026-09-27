@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from datetime import datetime
 from urllib.parse import quote
@@ -44,7 +45,7 @@ def _read_text(path: str) -> str | None:
 
 
 def _atomic_write(path: str, text: str) -> str:
-    tmp = f"{path}.{os.getpid()}.tmp"
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"  # unique per thread: parallel runs share a process
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(text)
     os.replace(tmp, path)

@@ -11,16 +11,13 @@ All code must be written during the hackathon. Use libraries freely, do not fork
 ## 1. Setup workflow (every teammate, ~1 min)
 
 ```bash
-bash setup.sh                       # venv + pinned deps + Panda assets + reference check
-# or manually:
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-bash scripts/fetch_assets.sh        # sparse-clones the Franka Panda from MuJoCo Menagerie (~36 MB, ~5 s)
-python scripts/check_reference.py   # expect: can/box/far-bin 10/10, bottle ~7/10, paper ~6/10
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+uv sync                                    # pinned deps from pyproject.toml / uv.lock
+bash scripts/fetch_assets.sh               # sparse-clones the Franka Panda from MuJoCo Menagerie (~36 MB, ~5 s)
+uv run python scripts/check_reference.py   # expect: can/box/far-bin 10/10, bottle ~7/10, paper ~6/10
+echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env
 ```
 
-- Linux without a display: `export MUJOCO_GL=egl` (setup.sh does this). Mac/Windows: don't set it.
+- Linux without a display: `export MUJOCO_GL=egl`. Mac/Windows: don't set it.
 - Interactive viewer on Mac needs `mjpython` instead of `python`.
 - Do NOT add `gymnasium-robotics` or `robosuite`: both crash (AssertionError) on current MuJoCo.
 
@@ -63,17 +60,14 @@ run_agent.py      DONE   CLI: run the agent loop
 Steps A-D can run in parallel (different files). E is last.
 
 **A. executor.py** (parallel)
-- `run_policy(code: str, task, seed, out_dir, timeout_s=180, video_fps=None) -> dict`
-- Writes `out_dir/policy.py`, spawns `python -m robot_race.executor --task --seed --code --out [--fps]`
-  with `subprocess.run(timeout=...)`, reads `out_dir/result.json`. On timeout or crash, write a
-  result with `success=False` and the error/stderr tail.
-- Worker: `Env(task, seed, record=True, video_fps=fps)`, `SimRobot(env)`,
-  `exec(compile(code, "policy.py", "exec"), {"robot": robot, "np": np, "math": math})`, call `run(robot)`.
-  Catch `TimeLimit` and all exceptions (keep the last ~6 traceback lines). Then `env.settle(1.0)`,
-  `env.result()`, save 4 key frames (`key_0..3.png` at 0, 1/3, 2/3, end), `attempt.gif`
-  (imageio: `duration` is in **milliseconds** -> `1000/fps`), `attempt.mp4` (`fps=`), `result.json`,
-  then `env.close()`.
-- Done when: the reference policy as a code string gives `success: true` + a playable GIF.
+(As built; supersedes the original plan of in-sim GIF recording.)
+- `run_policy(code: str, task, seed, out_dir, timeout_s=180, fast=False, live=True) -> dict`
+- Writes `out_dir/policy.py`, spawns `python -m robot_race.executor --task --seed --code --out [--fast] [--no-live]`
+  with `subprocess.run(timeout=...)`, reads `out_dir/result.json`. On timeout or crash, writes a
+  result with `success=False` and the error/stderr tail. Never wipes `out_dir`.
+- Worker: `Env(task, seed, record=False, live_path=...)`, `SimRobot(env)`, exec the code, call `run(robot)`,
+  catch `TimeLimit` and all exceptions, `env.settle(1.0)`, `env.result()`, save `trajectory.npz`, then
+  render key frames, poster and (unless fast) `attempt.mp4` from the trajectory via `replay.py`. No GIF.
 
 **B. agent.py + run_agent.py** (parallel; build against FakeRobot / a canned result until A lands)
 - Model: `ANTHROPIC_MODEL` env var, else `claude-sonnet-5` (pinned so races compare strategies, not models).
@@ -88,11 +82,11 @@ Steps A-D can run in parallel (different files). E is last.
   per-attempt results + code, solved_at).
 - CLI flags: `--task --seed --tries 5 --strategy "<text>" --example --context-file <path> --fast`
   (`--example` adds the reference policy to the prompt: Gate 3 fallback;
-  `--fast` = `video_fps=0.5`, key frames only).
+  `--fast` = no mp4: key frames, poster and trajectory only).
 - Done when: `python run_agent.py --task can_to_bin --seed 0` succeeds within 5 tries.
 
 **C. viewer.py** (parallel)
-- `write_index(run_dir)`: scan subdirs with `result.json`; one card each: GIF, success badge, time,
+- `write_index(run_dir)`: scan subdirs with `result.json`; one card each: mp4 video, success badge, time,
   collisions, energy, error, code in `<details>`. Plain HTML + inline CSS. Call it at the end of
   run_policy.py and run_agent.py.
 
@@ -102,7 +96,7 @@ Steps A-D can run in parallel (different files). E is last.
 - FakeRobot: same methods as SimRobot, returns canned state (copy one real `get_state()`), zeros image.
 
 **E. Integration** (sequential, after A-D)
-1. Gate 2: `run_policy.py` on the reference policy, 5 seeds, GIFs look right.
+1. Gate 2: `run_policy.py` on the reference policy, 5 seeds, videos look right. (PASSED: 5/5)
 2. Gate 3: `run_agent.py --task can_to_bin` on seeds 0-2. If it fails, tighten the prompt
    (not the API) or use `--example`.
 3. Then try `bottle_to_bin`, `box_to_bin` (needs yaw), `paper_to_bin` (hard: bounces).
@@ -112,7 +106,7 @@ Steps A-D can run in parallel (different files). E is last.
 - Physics + IK: ~20x real time (a 12 s episode runs in ~0.5 s without video).
 - Rendering is the bottleneck on CPU: ~80 ms/frame with shadows off (default), ~290 ms with shadows.
   Env vars: `RR_VIDEO_FPS` (default 12), `RR_SHADOWS=1` for demo-quality video on a laptop GPU.
-- For races, record key frames only (`video_fps=0.5`) and re-render the winner with full video.
+- For races, use `--fast` (no mp4) and re-render the winner with `python -m robot_race.replay`.
 
 ## 6. Tuning knobs if grasps fail
 
