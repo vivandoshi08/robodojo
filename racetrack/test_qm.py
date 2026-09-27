@@ -198,3 +198,21 @@ def test_launch_starts_qm_turn(monkeypatch, tmp_path):
     assert out["qm"]["status"] == "started" and out["qm"]["session_id"] == "s1"
     assert sent["body"]["surface"] == "web" and out["race_id"] in sent["body"]["text"]
     assert '"agent_id": "drop"' in sent["body"]["text"]
+
+
+def test_launch_passes_custom_strategies_and_plans(monkeypatch, tmp_path):
+    import launch as ql
+    monkeypatch.setattr(ptc, "ROOT", tmp_path)
+    monkeypatch.setattr(ql, "ROOT", tmp_path)
+    sweep = {"name": "Sweep", "approach": "Push the can off the table edge into the bin."}
+    out = ql.launch_qm_race("can_to_bin", agents=2, label="qm-custom", planner=False, start=False,
+                            custom=[sweep])
+    names = [(s["agent_id"], s["name"], s["mode"]) for s in out["plan"]["strategies"]]
+    assert names[0] == ("agent-1", "Sweep", "custom") and len(names) == 2
+    ctx = json.loads((tmp_path / out["dir"] / "contexts.json").read_text())
+    assert "The user wrote this strategy" in ctx[0]["strategy_prompt"] and sweep["approach"] in ctx[0]["strategy_prompt"]
+
+    premade = {"strategies": [{"agent_id": "agent-1", "name": "Sweep", "mode": "custom",
+                               "approach": sweep["approach"], "choices": {}}], "model": None}
+    out2 = ql.launch_qm_race("can_to_bin", agents=1, label="qm-plan", start=False, plan=premade)
+    assert out2["agents"] == ["agent-1"] and out2["plan"]["strategies"][0]["name"] == "Sweep"

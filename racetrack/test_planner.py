@@ -119,3 +119,39 @@ def test_memory_from_tracker_uses_latest_closed_race_on_same_task():
                     "skill": {"agent_id": "agent-1", "persona": "A", "code": "x = 1"}}
     mem = memory_from_tracker(T(), "can_to_bin")
     assert mem["lessons"] == ["[r1] A: solved 3/3"] and mem["skills"][0]["code"] == "x = 1"
+
+
+# ---- user-authored ("custom") strategies ----
+
+SWEEP = {"name": "Sweep", "approach": "Push the can off the table edge so it falls into the bin."}
+
+
+def test_custom_only_plan_skips_the_llm():
+    client = FakeClient()
+    plan = plan_strategies(TASK, 2, client=client,
+                           custom=[SWEEP, "Flick::flick the can toward the bin with the open gripper"])
+    assert client.calls == [] and plan["custom"] == 2 and plan["model"] is None
+    assert [(s["agent_id"], s["name"], s["mode"]) for s in plan["strategies"]] == [
+        ("agent-1", "Sweep", "custom"), ("agent-2", "Flick", "custom")]
+    assert validate(plan, 2, 0) == []
+    prompt = strategy_prompt(plan["strategies"][0], plan)
+    assert "The user wrote this strategy" in prompt and SWEEP["approach"] in prompt
+
+
+def test_mixed_plan_customs_first_and_planner_told_about_them():
+    llm = good_plan()
+    llm["strategies"] = llm["strategies"][:3]
+    client = FakeClient(llm)
+    plan = plan_strategies(TASK, 4, client=client, custom=[SWEEP])
+    assert [s["agent_id"] for s in plan["strategies"]] == ["agent-1", "agent-2", "agent-3", "agent-4"]
+    assert plan["strategies"][0]["mode"] == "custom" and plan["strategies"][1]["name"] == "S0"
+    assert plan["warnings"] == [] and len(client.calls) == 1
+    text = client.calls[0]["messages"][0]["content"][-1]["text"]
+    assert "do NOT duplicate" in text and "Push the can off the table edge" in text
+    assert "Plan exactly 3 strategies." in text
+    assert validate(plan, 4, 0) == []                   # custom needs no axis choices
+
+
+def test_custom_needs_an_approach():
+    with pytest.raises(ValueError):
+        plan_strategies(TASK, 1, client=FakeClient(), custom=[{"name": "empty"}])

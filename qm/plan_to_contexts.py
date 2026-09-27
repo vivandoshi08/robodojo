@@ -44,8 +44,17 @@ def plan_from_cards(path: Path = STRATEGIES, n: Optional[int] = None) -> dict[st
             "model": None, "source": "strategies.json", "warnings": []}
 
 
-def make_plan(task: str, seed: int, n: int, out_dir: Path, planner: bool = True) -> dict[str, Any]:
-    """LLM planner (memory from past races on the tracker) when it can run, else the static cards."""
+def make_plan(task: str, seed: int, n: int, out_dir: Path, planner: bool = True,
+              custom: Optional[list] = None) -> dict[str, Any]:
+    """LLM planner (memory from past races on the tracker) when it can run, else the static cards.
+    `custom`: user-authored strategies, raced verbatim as the first agents (racetrack.planner)."""
+    from racetrack.planner import normalize_custom
+    customs = normalize_custom(custom)[:n]
+    if customs and len(customs) >= n:
+        from racetrack.planner import plan_strategies, sim_task
+        plan = plan_strategies(sim_task(task), n, custom=customs)
+        plan["source"] = "user"
+        return plan
     if planner:
         try:
             from racetrack.planner import memory_from_tracker, observe_sim, plan_strategies, sim_task
@@ -55,12 +64,19 @@ def make_plan(task: str, seed: int, n: int, out_dir: Path, planner: bool = True)
             t = sim_task(task)
             state, image = observe_sim(task, seed, out_dir)
             memory = memory_from_tracker(Tracker(), task)
-            plan = plan_strategies(t, n, state=state, image=image, memory=memory, client=client)
-            plan["source"] = "planner"
+            plan = plan_strategies(t, n, state=state, image=image, memory=memory, client=client,
+                                   custom=customs)
+            plan["source"] = "planner+user" if customs else "planner"
             return plan
         except Exception as e:  # no key, no network, planner error: race with the cards instead
             _log(f"planner unavailable ({type(e).__name__}: {e}); using {STRATEGIES.name}")
-    return plan_from_cards(n=n)
+    if not customs:
+        return plan_from_cards(n=n)
+    cards = plan_from_cards(n=n - len(customs))["strategies"]
+    strategies = [{"agent_id": f"agent-{i + 1}", **{k: v for k, v in c.items() if k != "agent_id"}}
+                  for i, c in enumerate(customs + cards)]
+    return {"strategies": strategies, "model": None, "source": "user+strategies.json", "warnings": [],
+            "custom": len(customs)}
 
 
 def memory_context(tracker: Tracker, race_id: Optional[str], task: str) -> Optional[str]:
@@ -92,8 +108,13 @@ def build_contexts(plan: dict[str, Any], task: str, seed: int, race_id: Optional
 def prepare(args) -> dict[str, Any]:
     out_dir = ROOT / "races" / (args.label or "qm")
     out_dir.mkdir(parents=True, exist_ok=True)
-    plan = (json.loads(Path(args.plan).read_text()) if args.plan else
-            make_plan(args.task, args.seed, args.agents, out_dir, planner=not args.no_planner))
+    if isinstance(getattr(args, "plan", None), dict):  # a pre-made plan (e.g. previewed in the web UI)
+        plan = dict(args.plan)
+    elif args.plan:
+        plan = json.loads(Path(args.plan).read_text())
+    else:
+        plan = make_plan(args.task, args.seed, args.agents, out_dir, planner=not args.no_planner,
+                         custom=getattr(args, "custom", None))
     tracker = Tracker(args.url)
     race_id, context = None, None
     try:
@@ -150,6 +171,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--plan", default=None, help="use this plan.json instead of planning")
     p.add_argument("--no-planner", action="store_true", help="skip the LLM planner, race the static cards")
     p.add_argument("--no-memory", action="store_true", help="cold race: no GBrain/Memorable context")
+    p.add_argument("--custom", action="append", default=[], metavar="NAME::APPROACH",
+                   help="user strategy raced verbatim as the first agents (repeatable)")
     p = sub.add_parser("contexts")
     p.add_argument("--race-id", required=True)
     p.add_argument("--task", default="can_to_bin")

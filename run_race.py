@@ -33,8 +33,8 @@ from datetime import datetime
 from pathlib import Path
 
 from racetrack.client import Tracker
-from racetrack.planner import (DEFAULT_MODEL as PLANNER_MODEL, memory_from_tracker, observe_sim,
-                               plan_strategies, register_plan, sim_task)
+from racetrack.planner import (DEFAULT_MODEL as PLANNER_MODEL, load_custom, memory_from_tracker,
+                               observe_sim, plan_strategies, register_plan, sim_task)
 from robot_race.agent import _load_env, make_client, slugify
 from robot_race.tasks import TASKS
 
@@ -65,11 +65,16 @@ def make_plan(a, tracker: Tracker, up: bool, race_dir: Path, brain_lessons: list
     if brain_lessons and a.memory != "none":  # gbrain think over past races, so strategy choice sees it
         memory = memory or {"lessons": [], "skills": []}
         memory["lessons"] = list(brain_lessons) + list(memory.get("lessons") or [])
+    custom = load_custom(a.custom_file, a.custom)
+    if len(custom) >= a.agents:  # every racer is user-authored: no planner call
+        print(f"racing {a.agents} user strategies for {a.task} (no planner)", flush=True)
+        return plan_strategies(task, a.agents, memory=memory, custom=custom)
     state, image = observe_sim(a.task, a.seeds[0], race_dir)
-    print(f"planning {a.agents} strategies for {a.task} with {a.planner_model}"
-          f"{' (with memory)' if memory else ''} ...", flush=True)
+    print(f"planning {a.agents - len(custom)} strategies for {a.task} with {a.planner_model}"
+          f"{' (with memory)' if memory else ''}{f' + {len(custom)} user strategies' if custom else ''} ...",
+          flush=True)
     return plan_strategies(task, a.agents, state=state, image=image, memory=memory, n_exploit=a.exploit,
-                           model=a.planner_model, client=make_client())
+                           model=a.planner_model, client=make_client(), custom=custom)
 
 
 def run_racer(a, plan_path: Path, race_id: str, agent_id: str, name: str, seed: int, race_dir: Path,
@@ -130,6 +135,10 @@ def main(argv=None) -> int:
     ap.add_argument("--planner-model", default=PLANNER_MODEL)
     ap.add_argument("--runs-dir", default="runs")
     ap.add_argument("--races-dir", default="races")
+    ap.add_argument("--custom-file", help='JSON list of user strategies {"name", "approach"[, "choices"]}: '
+                    "raced as the first agents; the planner fills the rest")
+    ap.add_argument("--custom", action="append", default=[], metavar="NAME::APPROACH",
+                    help='user strategy, e.g. --custom "Sweep::push the can off the table edge into the bin"')
     ap.add_argument("--brain", action=argparse.BooleanOptionalAction, default=True,
                     help="GBrain skill + Memorable episodes as racer context, record episodes, distill after")
     a = ap.parse_args(argv)

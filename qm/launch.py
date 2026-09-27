@@ -148,12 +148,14 @@ def start_qm_turn(race_id: str, message: str, contexts: list[dict[str, Any]]) ->
 
 def launch_qm_race(task: str = "can_to_bin", agents: int = 4, seeds: Optional[list[int]] = None,
                    tries: int = 5, label: str = "qm", *, planner: bool = True, memory: bool = True,
-                   tracker_url: Optional[str] = None, start: bool = True) -> dict[str, Any]:
+                   tracker_url: Optional[str] = None, start: bool = True,
+                   custom: Optional[list] = None, plan: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Prepare a QM race (tracker race + plan + memory) and say how to start it. One seed per QM race:
     extra seeds are recorded but not raced (the swarm skill races one scene)."""
     seeds = list(seeds or [0])
     args = argparse.Namespace(task=task, seed=seeds[0], agents=agents, tries=tries, label=label,
-                              race_id=None, plan=None, no_planner=not planner, no_memory=not memory,
+                              race_id=None, plan=plan, custom=custom,
+                              no_planner=not planner, no_memory=not memory,
                               url=tracker_url, sandbox_tracker_url="http://host.docker.internal:8000")
     prep = ptc.prepare(args)
     race_id = prep["race_id"]
@@ -176,6 +178,11 @@ def launch_qm_race(task: str = "can_to_bin", agents: int = 4, seeds: Optional[li
     launch["plan"] = json.loads((race_dir / "plan.json").read_text())
     launch["dir"] = prep["dir"]
     return launch
+
+
+def _custom_args(custom_file: Optional[str], custom: list[str]) -> list[dict[str, Any]]:
+    from racetrack.planner import load_custom
+    return load_custom(custom_file, custom)
 
 
 def qm_status(race_id: str, tracker_url: Optional[str] = None) -> dict[str, Any]:
@@ -213,6 +220,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--no-planner", action="store_true")
     p.add_argument("--no-memory", action="store_true")
     p.add_argument("--no-start", action="store_true", help="prepare only; don't call QM")
+    p.add_argument("--custom", action="append", default=[], metavar="NAME::APPROACH",
+                   help="user strategy raced verbatim as the first agents (repeatable)")
+    p.add_argument("--custom-file", help='JSON list of {"name", "approach"[, "choices"]}')
+    p.add_argument("--plan", help="race this plan.json (e.g. from `python -m racetrack.planner preview`)")
     p = sub.add_parser("status")
     p.add_argument("--race-id", required=True)
     sub.add_parser("auth-check", help="signed GET against QM (free); ok = signature accepted")
@@ -220,7 +231,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.cmd == "launch":
         out = launch_qm_race(args.task, args.agents, [int(s) for s in args.seeds.split(",") if s != ""],
                              args.tries, args.label, planner=not args.no_planner,
-                             memory=not args.no_memory, tracker_url=args.url, start=not args.no_start)
+                             memory=not args.no_memory, tracker_url=args.url, start=not args.no_start,
+                             custom=_custom_args(args.custom_file, args.custom) or None,
+                             plan=json.loads(Path(args.plan).read_text()) if args.plan else None)
         out.pop("plan", None)
     elif args.cmd == "auth-check":
         out = qm_auth_check()

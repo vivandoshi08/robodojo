@@ -152,7 +152,7 @@ def memory_from_tracker(tracker, task_id: str, races: int = 1) -> Optional[dict[
 
 
 def _user_content(task: dict[str, Any], n: int, state: Optional[dict], image: Optional[str],
-                  memory: Optional[dict]) -> list[dict[str, Any]]:
+                  memory: Optional[dict], custom: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
     parts = [f"# Task\n{task['description']}"]
     if task.get("success"):
         parts.append(f"# Success means\n{task['success']}")
@@ -168,6 +168,10 @@ def _user_content(task: dict[str, Any], n: int, state: Optional[dict], image: Op
                        f"{s.get('solve_rate')}, {s.get('mean_tries_to_solve')} tries on average):\n"
                        f"```python\n{(s.get('code') or '')[:3000]}\n```")
         parts.append("\n".join(mem))
+    if custom:
+        cs = ["# Strategies the user already assigned (other agents race these; do NOT duplicate them)"]
+        cs += [f"- {c['name']}: {c['approach']}" for c in custom]
+        parts.append("\n".join(cs))
     parts.append(f"Plan exactly {n} strategies.")
     content: list[dict[str, Any]] = []
     if image:
@@ -183,12 +187,14 @@ def _user_content(task: dict[str, Any], n: int, state: Optional[dict], image: Op
 def validate(plan: dict[str, Any], n: int, n_exploit: int) -> list[str]:
     problems = []
     axes = [a["name"] for a in plan.get("axes", [])]
-    strategies = plan.get("strategies", [])
-    if len(strategies) != n:
-        problems.append(f"expected {n} strategies, got {len(strategies)}")
-    names = [s.get("name", "").strip().lower() for s in strategies]
-    if len(set(names)) != len(names):
+    all_strategies = plan.get("strategies", [])
+    if len(all_strategies) != n:
+        problems.append(f"expected {n} strategies, got {len(all_strategies)}")
+    all_names = [s.get("name", "").strip().lower() for s in all_strategies]
+    if len(set(all_names)) != len(all_names):
         problems.append("strategy names must be unique")
+    # User-authored ("custom") strategies are free-form: no axis choices required.
+    strategies = [s for s in all_strategies if s.get("mode") != "custom"]
     seen: dict[tuple, str] = {}
     for s in strategies:
         choices = {k.strip().lower(): str(v).strip().lower() for k, v in (s.get("choices") or {}).items()}
@@ -207,12 +213,73 @@ def validate(plan: dict[str, Any], n: int, n_exploit: int) -> list[str]:
 
 # --------------------------------------------------------------- planning ---
 
+def normalize_custom(custom: Optional[list]) -> list[dict[str, Any]]:
+    """User-authored strategies -> [{name, approach, mode: "custom", choices, ...}]. Accepts dicts with
+    name + approach (choices/starting_parameters/risks optional) or "name::approach" strings."""
+    out: list[dict[str, Any]] = []
+    for c in custom or []:
+        if isinstance(c, str):
+            name, _, approach = c.partition("::")
+            c = {"name": name, "approach": approach}
+        name, approach = str(c.get("name") or "").strip(), str(c.get("approach") or "").strip()
+        if not approach:
+            raise ValueError(f"custom strategy {name or '?'!r} needs an approach")
+        s = {"name": name or f"Custom {len(out) + 1}", "mode": "custom", "approach": approach,
+             "choices": dict(c.get("choices") or {}), "risks": str(c.get("risks") or ""),
+             "author": "user"}
+        if c.get("starting_parameters"):
+            s["starting_parameters"] = dict(c["starting_parameters"])
+        out.append(s)
+    return out
+
+
 def plan_strategies(task: dict[str, Any], n: int, *, state: Optional[dict] = None,
                     image: Optional[str] = None, memory: Optional[dict] = None,
                     n_exploit: Optional[int] = None, model: str = DEFAULT_MODEL,
-                    client=None, max_repairs: int = 1) -> dict[str, Any]:
+                    client=None, max_repairs: int = 1,
+                    custom: Optional[list] = None) -> dict[str, Any]:
     """Returns {"task_id", "axes", "strategies": [{agent_id, name, mode, choices, approach, ...}],
-    "coverage_rationale", "model", "warnings"}."""
+    "coverage_rationale", "model", "warnings"}.
+
+    `custom`: user-authored strategies ({name, approach[, choices]} or "name::approach"). They are kept
+    verbatim (mode "custom") as the first agents; the planner fills the other n - len(custom) slots and
+    is told about them so it doesn't duplicate them. No LLM call when custom already fills n."""
+    customs = normalize_custom(custom)[:n]
+    n_llm = n - len(customs)
+    if n_llm <= 0:
+        plan = {"axes": [], "strategies": [], "coverage_rationale": "all strategies authored by the user",
+                "model": None, "used_memory": bool(memory), "warnings": []}
+    else:
+        plan = _plan_llm(task, n_llm, state=state, image=image, memory=memory, n_exploit=n_exploit,
+                         model=model, client=client, max_repairs=max_repairs, custom=customs)
+    strategies = [{"agent_id": f"agent-{i + 1}", **s}
+                  for i, s in enumerate(customs + [{k: v for k, v in s.items() if k != "agent_id"}
+                                                   for s in plan["strategies"]])]
+    return {"task_id": task["task_id"], "axes": plan["axes"], "strategies": strategies,
+            "coverage_rationale": plan["coverage_rationale"], "model": plan["model"],
+            "used_memory": plan["used_memory"], "warnings": plan["warnings"],
+            "custom": len(customs)}
+
+
+def preview_plan(task: dict[str, Any] | str, n: int, custom: Optional[list] = None, *,
+                 memory: Optional[dict] = None, seed: int = 0, out_dir: Optional[Path] = None,
+                 **kw) -> dict[str, Any]:
+    """Plan-only step (nothing is raced): the plan a race would use. `task` is a task dict or a sim task
+    id (then the planner sees the live scene of `seed`). Race it later with run_race.py --plan."""
+    state = kw.pop("state", None)
+    image = kw.pop("image", None)
+    if isinstance(task, str):
+        tid = task
+        task = sim_task(tid)
+        if len(normalize_custom(custom)) < n:
+            state, image = observe_sim(tid, seed, Path(out_dir or ".").resolve())
+    return plan_strategies(task, n, state=state, image=image, memory=memory, custom=custom, **kw)
+
+
+def _plan_llm(task: dict[str, Any], n: int, *, state: Optional[dict] = None,
+              image: Optional[str] = None, memory: Optional[dict] = None,
+              n_exploit: Optional[int] = None, model: str = DEFAULT_MODEL,
+              client=None, max_repairs: int = 1, custom: Optional[list] = None) -> dict[str, Any]:
     if client is None:
         import anthropic
         client = anthropic.Anthropic()
@@ -225,7 +292,7 @@ def plan_strategies(task: dict[str, Any], n: int, *, state: Optional[dict] = Non
                    "\nLessons from earlier races are provided but no proven skill: every strategy has "
                    "mode \"explore\" and should avoid the failures the lessons describe.\n")
     system = SYSTEM.format(n=n, max_tries=task.get("max_attempts", 5), memory_rule=memory_rule)
-    messages: list[dict[str, Any]] = [{"role": "user", "content": _user_content(task, n, state, image, memory)}]
+    messages: list[dict[str, Any]] = [{"role": "user", "content": _user_content(task, n, state, image, memory, custom)}]
 
     # tool_choice "auto": Opus 5.5 / Fable 5.1 reject forced tool use (type "tool"/"any" -> 400), so the
     # system prompt asks for submit_plan and a reply without the call gets one nudge.
@@ -258,6 +325,18 @@ def plan_strategies(task: dict[str, Any], n: int, *, state: Optional[dict] = Non
 def strategy_prompt(strategy: dict[str, Any], plan: Optional[dict[str, Any]] = None) -> str:
     """The block each agent adds to its own prompt. Keeps agents on their strategy across retries."""
     n = len((plan or {}).get("strategies", [])) or "several"
+    if strategy.get("mode") == "custom":
+        lines = [f"## Your strategy in this race: {strategy['name']} ({strategy.get('agent_id', '')})",
+                 f"You are one of {n} agents racing on this task. The user wrote this strategy for you; "
+                 "follow it as your approach:", "", strategy["approach"].strip(), ""]
+        if strategy.get("choices"):
+            lines.append("Decisions fixed by the user:")
+            lines += [f"- {axis}: {choice}" for axis, choice in strategy["choices"].items()]
+        if strategy.get("starting_parameters"):
+            params = ", ".join(f"{k}={v}" for k, v in strategy["starting_parameters"].items())
+            lines.append(f"Starting parameters: {params}")
+        lines.append("When a try fails, fix it within this strategy rather than switching approach.")
+        return "\n".join(lines) + "\n"
     lines = [f"## Your strategy in this race: {strategy['name']} ({strategy.get('agent_id', '')})",
              f"You are one of {n} agents racing on this task. Each agent was assigned a different "
              "strategy so the race covers different approaches. Implement yours:",
@@ -304,7 +383,57 @@ def _tracker(url: Optional[str] = None):
     return Tracker(url)
 
 
+def load_custom(custom_file: Optional[str] = None, custom: Optional[list[str]] = None) -> list[dict[str, Any]]:
+    """--custom-file (JSON list of {name, approach[, choices]}) + repeatable --custom "name::approach"."""
+    items: list = []
+    if custom_file:
+        data = json.loads(Path(custom_file).read_text())
+        items += data.get("strategies", data) if isinstance(data, dict) else data
+    items += list(custom or [])
+    return normalize_custom(items)
+
+
+def preview_main(argv: Optional[list[str]] = None) -> int:
+    ap = argparse.ArgumentParser(prog="python -m racetrack.planner preview",
+                                 description="Plan only: print the plan a race would use (nothing is raced).")
+    ap.add_argument("--task", default="can_to_bin", help="sim task id")
+    ap.add_argument("--agents", type=int, default=4)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--custom-file", help='JSON list of {"name", "approach"[, "choices"]}')
+    ap.add_argument("--custom", action="append", default=[], metavar="NAME::APPROACH")
+    ap.add_argument("--memory", default="tracker", help="'tracker', 'none', or a JSON file")
+    ap.add_argument("--exploit", type=int, default=None)
+    ap.add_argument("--url", default=None, help="tracker URL")
+    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--out", help="also write the plan here (race it with run_race.py --plan)")
+    args = ap.parse_args(argv)
+    custom = load_custom(args.custom_file, args.custom)
+    memory = None
+    if args.memory == "tracker":
+        try:
+            memory = memory_from_tracker(_tracker(args.url), args.task)
+        except Exception:
+            memory = None
+    elif args.memory != "none":
+        memory = json.loads(Path(args.memory).read_text())
+    client = None
+    if len(custom) < args.agents:
+        from robot_race.agent import _load_env, make_client
+        _load_env()
+        client = make_client()
+    out_dir = Path(args.out).resolve().parent if args.out else Path(".")
+    plan = preview_plan(args.task, args.agents, custom, memory=memory, seed=args.seed, out_dir=out_dir,
+                        n_exploit=args.exploit, model=args.model, client=client)
+    text = json.dumps(plan, indent=2)
+    if args.out:
+        Path(args.out).write_text(text)
+    print(text)
+    return 0
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "preview":
+        raise SystemExit(preview_main(sys.argv[2:]))
     ap = argparse.ArgumentParser(description="Plan distinct strategies for a race.")
     ap.add_argument("--sim-task", help="robot_race task id (e.g. can_to_bin): task text + API_DOC + scene "
                                           "from the sim; replaces --task-file/--api/--state/--image")
@@ -322,6 +451,8 @@ def main():
     ap.add_argument("--url", default=None, help="tracker URL")
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--out", default="plan.json")
+    ap.add_argument("--custom-file", help='JSON list of user strategies {"name", "approach"[, "choices"]}')
+    ap.add_argument("--custom", action="append", default=[], metavar="NAME::APPROACH")
     args = ap.parse_args()
 
     tracker = _tracker(args.url)
@@ -342,7 +473,8 @@ def main():
               json.loads(Path(args.memory).read_text()))
 
     plan = plan_strategies(task, args.agents, state=state, image=args.image, memory=memory,
-                           n_exploit=args.exploit, model=args.model, client=client)
+                           n_exploit=args.exploit, model=args.model, client=client,
+                           custom=load_custom(args.custom_file, args.custom))
     if args.race:
         plan["race_id"] = tracker.start_race(label=args.race, task=task["task_id"],
                                              scoring={"max_attempts": task["max_attempts"]})
