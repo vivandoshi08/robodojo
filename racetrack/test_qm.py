@@ -130,3 +130,22 @@ def test_ingest_parses_qm_run_ids():
     assert identify(Path("c/push_off-a5/seed_3"), {}, "agent-1") == ("push_off", 3, 5)
     assert identify(Path("agent-2/seed0/attempt3"), {}, "x") == ("agent-2", 0, 3)
     assert identify(Path("c/agent-1-a2/seed_1"), {}, "x") == ("agent-1", 1, 2)
+
+
+def test_launch_and_status(monkeypatch, tmp_path, capsys):
+    import launch as ql
+    monkeypatch.setattr(ptc, "ROOT", tmp_path)
+    monkeypatch.setattr(ql, "ROOT", tmp_path)
+    out = ql.launch_qm_race("can_to_bin", agents=2, seeds=[3, 4], label="qm-launch", planner=False)
+    race = out["race_id"]
+    assert out["qm"]["message"] == f"Race {race} on can_to_bin seed 3" and out["skipped_seeds"] == [4]
+    saved = json.loads((tmp_path / "races" / race / "launch.json").read_text())
+    assert saved["backend"] == "qm" and saved["agents"] == ["place", "drop"] and saved["memory"]
+    d = tmp_path / "r"
+    d.mkdir()
+    (d / "result.json").write_text(json.dumps({"seed": 3, "success": True, "time_s": 5.0}))
+    cli(capsys, "record", "--race-id", race, "--agent-id", "drop", "--seed", "3", "--attempt", "2",
+        "--result", str(d / "result.json"))
+    st = ql.qm_status(race)
+    assert st["workers"]["drop"] == {"attempts": 2, "solved": True}
+    assert st["workers"]["place"] == {"attempts": 0, "solved": False} and st["launch"]["seed"] == 3

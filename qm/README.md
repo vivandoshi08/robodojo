@@ -101,3 +101,19 @@ qm/collect_runs.sh           pull race artifacts out of sandbox containers into 
 qm/plan_to_contexts.py       prepare (plan + tracker race + memory) / contexts (swarm spawn contexts)
 qm/finish_race.sh            host: collect runs, close the race, distill memory
 ```
+
+## Launching from the web UI
+
+`qm/launch.py` is the host-side entry point a web backend calls:
+`launch_qm_race(task, agents, seeds, tries, label)` opens the race on the tracker, recalls memory, plans the
+strategies and writes `races/<race_id>/{plan,contexts,launch}.json`. `qm_status(race_id)` returns each
+worker's progress from the tracker (attempts so far, solved, winner once closed).
+
+Starting the QM root session over QM's API is **not automated yet**. QM's core accepts external
+requests only when they are HMAC-signed with its `CORE_SIGNING_SECRET`, and the dev instance derives
+that secret itself unless you set one. For now `launch` returns `qm.message` (e.g. "Race <id> on can_to_bin seed 0")
+for a person to send to the QM root in the web UI.
+
+To enable API launch: put your own `CORE_SIGNING_SECRET=<openssl rand -hex 32>` in `qm/dev.env` and
+restart QM (`bash qm/start_qm.sh down && bash qm/start_qm.sh`). launch.py can then sign requests with
+the same value. The session/turn route still has to be chosen and wired.
