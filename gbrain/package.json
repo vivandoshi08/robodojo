@@ -1,0 +1,19 @@
+{
+  "name": "race-brain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GBrain side of the race: pre-race briefings, referee verdict pages, and skillopt on the winning strategy.",
+  "bin": {
+    "race-brain": "src/cli.ts"
+  },
+  "scripts": {
+    "cli": "bun src/cli.ts",
+    "fixture": "bun scripts/make-fixture.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}
