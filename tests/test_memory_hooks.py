@@ -9,7 +9,7 @@ from robot_race import memory_hooks as mh
 @pytest.fixture(autouse=True)
 def isolated_store(tmp_path, monkeypatch):
     monkeypatch.setenv("ROBODOJO_MEMORY_ROOT", str(tmp_path / "mem"))
-    monkeypatch.delenv("MEMORABLE_API_KEY", raising=False)
+    monkeypatch.setenv("MEMORABLE_API_KEY", "")  # blank beats .env: never ingest test episodes
     return tmp_path
 
 
