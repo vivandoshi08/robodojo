@@ -36,7 +36,8 @@ robot_race/
   viewer.py       DONE   runs/<id>/index.html gallery + runs/index.json manifest
   serve.py        DONE   dev HTTP server + /api/runs for the website (Range, CORS)
   trace.py        DONE   runs/<id>/trace.html: exact model inputs/outputs -> code -> sim-timed calls -> video
-scripts/trace_demo.py                DONE  no-API-key proof run of the audit chain (scripted client)
+scripts/trace_demo.py                DONE  no-API-key proof run of the audit chain (scripted client -> runs_demo/)
+docs/INTEGRITY.md                    DONE  fixed environment vs. what the model controls; how to audit a run
 policies/reference_pick_and_drop.py  DONE  scripted top-down grasp -> carry -> release
 scripts/fetch_assets.sh              DONE
 scripts/check_reference.py           DONE  reference policy x 5 tasks x 10 seeds, no video (~1 min)
@@ -84,8 +85,8 @@ Steps A-D can run in parallel (different files). E is last.
 - Save `response.md` per attempt and `runs/<run_id>/summary.json` (task, seed, model, strategy,
   per-attempt results + code, solved_at).
 - CLI flags: `--task --seed --tries 5 --strategy "<text>" --example --context-file <path> --fast`
-  (`--example` adds the reference policy to the prompt: Gate 3 fallback;
-  `--fast` = no mp4: key frames, poster and trajectory only).
+  (`--example` adds the reference policy to the prompt: opt-in, off by default, recorded as a hint and
+  bannered on every page, see docs/INTEGRITY.md; `--fast` = no mp4: key frames, poster and trajectory only).
 - Done when: `python run_agent.py --task can_to_bin --seed 0` succeeds within 5 tries.
 
 **C. viewer.py** (parallel)
@@ -100,8 +101,9 @@ Steps A-D can run in parallel (different files). E is last.
 
 **E. Integration** (sequential, after A-D)
 1. Gate 2: `run_policy.py` on the reference policy, 5 seeds, videos look right. (PASSED: 5/5)
-2. Gate 3: `run_agent.py --task can_to_bin` on seeds 0-2. If it fails, tighten the prompt
-   (not the API) or use `--example`.
+2. Gate 3: `run_agent.py --task can_to_bin` on seeds 0-2. If it fails, the prompt may only gain
+   environment FACTS (frame, units, what a call does); never solution advice (heights, grasp tips,
+   call sequences). `--example` exists but makes the run a hinted run (docs/INTEGRITY.md).
 3. Then try `bottle_to_bin`, `box_to_bin` (needs yaw), `paper_to_bin` (hard: bounces).
 
 ## 5. Performance facts (measured on a 2-CPU cloud box, no GPU)
@@ -162,8 +164,8 @@ runs/
                                   (times = sim s since episode start == attempt.mp4 time; includes
                                   get_state/get_image calls, which result.json["calls"] strings omit)
       provenance.json             policy_sha256 (bytes of policy.py as executed), response_code_sha256,
-                                  code_matches_response (bool | null if no reply sha given), task, seed,
-                                  completed, mujoco/python/numpy_version, sim_timestep, control_dt,
+                                  code_matches_response (bool | null if no reply sha given), refused (true =
+                                  sha mismatch, nothing ran), task, seed, completed, mujoco/python/numpy_version, sim_timestep, control_dt,
                                   episode_limit_s, trajectory_samples, trajectory_t_range, keyframe_times,
                                   video {file, fps, n_frames, frame_time} | null, wall_started/finished/s, error
       trajectory.npz              t [T], qpos [T, nq] at 50 Hz: re-render any camera/res later
@@ -183,6 +185,16 @@ runs/
   latency_s, retries, ts, usage, stop_reason, error}`. Turn n+1's newest user message = the feedback on attempt n.
 - `summary.json` (agent runs) adds `transcript: "transcript.jsonl"`, `trace: "trace.html"`,
   `observation: {front, top, state}` and per attempt `code_sha256`, `transcript_turn`.
+- **Integrity flags** (`summary.json`, agent runs): `hints: {"example": bool, "strategy": str|null,
+  "context": bool}` = everything beyond the environment that reached the model (all off by default);
+  `hinted` = any of them; `scripted` = true when the caller injected a client that is not
+  `anthropic.Anthropic` (a scripted/fake model), false when the loop created the real client. The legacy
+  top-level `example`, `strategy`, `context` fields stay. `run_started` events carry `hints` + `scripted`.
+  trace.html, `<run_id>/index.html` and the home cards show a banner: "Hint given: reference example in
+  prompt" (etc.), "SCRIPTED DEMO, NOT A MODEL", or "HAND-WRITTEN POLICY, NOT A MODEL" (run_policy runs).
+- **Provenance guard**: the agent always passes `response_code_sha256` (sha256 of the extracted code block);
+  if sha256(policy.py) differs, the executor does not run it: `result.json["error"]` starts with
+  "code does not match model reply", `provenance.json["refused"] = true`, no trajectory/calls/media.
 - `events.jsonl` types: `run_started`, `attempt_started`, `model_request` (turn, n_images, n_new_images,
   n_messages, model), `model_response` (turn, latency_s, retries, n_images, usage, stop_reason, error),
   `code_generated` (+ `code_sha256`), `attempt_finished`,
@@ -190,11 +202,14 @@ runs/
   `attempt_finished` embeds the result dict; `run_finished` has `status` ("solved"|"failed"|"error"), `solved_at`.
 - `summary.json["status"]`: `running` | `solved` | `failed` | `error`.
 - `runs/index.json`: `[{run_id, task, seed, model, strategy, status, solved_at, n_attempts, created_at,
-  poster, video}]` (poster/video = best attempt, relative to `runs/`).
+  kind ("agent"|"policy"), hints (null for policy runs), hinted, scripted, n_success, seeds, best_attempt,
+  poster, video}]` (poster/video = best attempt, relative to `runs/`). A public "model did it" claim needs
+  `kind == "agent" and not scripted and not hinted`.
 - HD re-render for the demo: `python -m robot_race.replay runs/<id>/attempt_<k> --width 1920 --height 1080
   --fps 60 --shadows --camera front` -> `attempt_hd.mp4`. On a Mac GPU this renders faster than real time
   (measured: 960x720 + shadows = 81 fps).
 - `--fast` (races): trajectory + key frames + poster only, no mp4; re-render the winner later with replay.
 - API: `GET /api/runs/<run_id>/transcript` -> `{"turns": [transcript.jsonl lines]}` (serve.py).
-- Proof run without an API key: `python scripts/trace_demo.py` (real loop + executor + sim, scripted
-  client; checks every link of the chain and prints the run dir).
+- Proof run without an API key: `python scripts/trace_demo.py [--runs-dir runs_demo]` (real loop + executor +
+  sim, scripted client whose 2nd reply is the reference policy; writes to gitignored `runs_demo/`, never the
+  public `runs/`, with `scripted: true`; checks every link of the chain and prints the run dir).

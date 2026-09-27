@@ -5,7 +5,11 @@ turn 2 replies with the reference policy. Then every link of the audit chain is 
 request bytes == what the client received, sha256s, code ran == code in reply, calls.json timing vs. the
 trajectory, click-to-seek mapping vs. the actual mp4, and no local paths in any file.
 
-python scripts/trace_demo.py [--runs runs] [--seed 0] [--fast]   -> prints the run dir + check results
+python scripts/trace_demo.py [--runs-dir runs_demo] [--seed 0] [--fast]   -> prints the run dir + check results
+
+Writes to runs_demo/ by default, never to the public runs/: the replies are canned (turn 2 is the hand-written
+reference policy), so this is NOT a model run. summary.json has scripted: true and trace.html / the run pages
+show a "SCRIPTED DEMO, NOT A MODEL" banner.
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ sys.path.insert(0, ROOT)
 
 from robot_race import agent  # noqa: E402
 
+DEFAULT_RUNS_DIR = "runs_demo"  # gitignored; keep scripted runs out of the public runs/ tree
 MODEL = "scripted-fake-client"  # never pretend to be Claude
 REFERENCE = "\n".join(l for l in open(os.path.join(ROOT, "policies", "reference_pick_and_drop.py")).read().splitlines()
                       if l.strip() != "import numpy as np").strip() + "\n"
@@ -67,7 +72,7 @@ class ScriptedClient:
                                         cache_creation_input_tokens=0))
 
 
-def run_demo(runs_dir: str = "runs", seed: int = 0, fast: bool = False, verbose: bool = True):
+def run_demo(runs_dir: str = DEFAULT_RUNS_DIR, seed: int = 0, fast: bool = False, verbose: bool = True):
     client = ScriptedClient(REPLIES)
     s = agent.run_agent_loop("can_to_bin", seed, tries=2, runs_dir=runs_dir, client=client, model=MODEL,
                              fast=fast, verbose=verbose, observation="oracle")  # scripted reference reads ground truth
@@ -142,6 +147,10 @@ def verify(run_dir: str, received: list[dict]) -> list[tuple[str, bool]]:
             errs = [abs(t[idx[min(round(c0 * fps), len(vt) - 1)]] - c0) for c0, _ in ts]
             add(f"attempt {k}: click-to-seek lands on a frame within {max(errs):.3f}s of each call's t_start "
                 f"(<= half a frame + half a sample)", max(errs) <= 0.5 / fps + 0.01 + 1e-9)
+    add("summary.scripted is true (injected client); only hint is oracle state (scripted reference)",
+        summary.get("scripted") is True and summary.get("hints") == {"example": False, "strategy": None, "context": False, "oracle_state": True})
+    add("trace.html shows the SCRIPTED DEMO banner",
+        "SCRIPTED DEMO, NOT A MODEL" in open(os.path.join(run_dir, "trace.html")).read())
     add("attempt 1 failed (flawed policy), attempt 2 solved",
         [a["result"]["success"] for a in summary["attempts"]] == [False, True] and summary["status"] == "solved")
     leaks = []
@@ -155,13 +164,18 @@ def verify(run_dir: str, received: list[dict]) -> list[tuple[str, bool]]:
     return checks
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--runs", default="runs")
+    ap.add_argument("--runs-dir", "--runs", dest="runs_dir", default=DEFAULT_RUNS_DIR,
+                    help="output root (default runs_demo/, never the public runs/)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--fast", action="store_true", help="no mp4 (skips the seek checks)")
-    a = ap.parse_args()
-    run_dir, client, _ = run_demo(a.runs, a.seed, a.fast)
+    return ap
+
+
+def main():
+    a = build_parser().parse_args()
+    run_dir, client, _ = run_demo(a.runs_dir, a.seed, a.fast)
     checks = verify(run_dir, client.received)
     for name, ok in checks:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")

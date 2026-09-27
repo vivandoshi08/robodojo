@@ -25,6 +25,7 @@ import numpy as np
 from .interfaces import RESULT_KEYS
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MISMATCH_ERROR = "code does not match model reply"  # policy.py sha256 != response_code_sha256: nothing ran
 KEY_SIZE, POSTER_SIZE, VIDEO_SIZE, VIDEO_FPS = (320, 240), (640, 480), (640, 480), 30
 
 
@@ -76,13 +77,14 @@ def run_policy(code: str, task: str, seed: int, out_dir: str, timeout_s: float =
                fast: bool = False, live: bool = True, response_code_sha256: str | None = None,
                observation: str = "telemetry") -> dict:
     """Runs `code` (must define run(robot)) on (task, seed) in a subprocess. Always returns a full result dict.
-    response_code_sha256: sha256 of the code block extracted from the model reply; provenance.json records
-    whether the code that actually ran matches it."""
+    response_code_sha256: sha256 of the code block extracted from the model reply. provenance.json records
+    whether the code that ran matches it, and the worker REFUSES to run policy.py if it doesn't
+    (result error = MISMATCH_ERROR)."""
     out_dir = os.path.abspath(out_dir)
     os.makedirs(out_dir, exist_ok=True)
     code_path = os.path.join(out_dir, "policy.py")
-    with open(code_path, "w") as f:
-        f.write(code)
+    with open(code_path, "wb") as f:  # bytes, no newline translation: sha256(policy.py) == sha256(code)
+        f.write(code.encode("utf-8"))
     res_path = os.path.join(out_dir, "result.json")
     for stale in ("result.json", "calls.json", "provenance.json"):
         if os.path.exists(os.path.join(out_dir, stale)):
@@ -158,10 +160,20 @@ def worker(task: str, seed: int, code_path: str, out_dir: str, fast: bool = Fals
     from .robot import SimRobot
     from .tasks import Env
     t0 = time.time()
-    env = Env(task, seed, record=False, live_path=os.path.join(out_dir, "live.jpg") if live else None)
-    robot, error, exc = SimRobot(env, observation=observation), None, None
     with open(code_path, "rb") as f:
         code_bytes = f.read()
+    policy_sha = hashlib.sha256(code_bytes).hexdigest()
+    if response_sha256 and policy_sha != response_sha256:
+        # Provenance guard: only the exact code block from the model reply may drive the robot.
+        # Checked before the scene is even built: a mismatched file never touches the sim.
+        err = f"{MISMATCH_ERROR} (policy.py sha256 {policy_sha[:12]} != reply {response_sha256[:12]}): refused to run"
+        _write_json(os.path.join(out_dir, "provenance.json"), _provenance(
+            task, seed, policy_sha, response_sha256, t0, time.time(), completed=False, refused=True, error=err))
+        res = _fill(dict(error=err, wall_s=round(time.time() - t0, 2)), task, seed, out_dir, code_path)
+        _write_json(os.path.join(out_dir, "result.json"), res)
+        return res
+    env = Env(task, seed, record=False, live_path=os.path.join(out_dir, "live.jpg") if live else None)
+    robot, error, exc = SimRobot(env, observation=observation), None, None
     try:
         code = code_bytes.decode("utf-8")  # exactly these bytes are compiled and hashed
         ns = {"robot": robot, "np": np, "math": math, "__name__": "policy"}
@@ -194,7 +206,7 @@ def worker(task: str, seed: int, code_path: str, out_dir: str, fast: bool = Fals
     vt = replay.video_times(t, VIDEO_FPS)
     has_mp4 = os.path.exists(os.path.join(out_dir, "attempt.mp4"))
     _write_json(os.path.join(out_dir, "provenance.json"), _provenance(
-        task, seed, hashlib.sha256(code_bytes).hexdigest(), response_sha256, t0, time.time(),
+        task, seed, policy_sha, response_sha256, t0, time.time(), refused=False,
         sim_timestep=float(env.model.opt.timestep), trajectory_samples=int(len(t)),
         trajectory_t_range=[round(float(t[0]), 4), round(float(t[-1]), 4)],
         keyframe_times=[round(x, 4) for x in keyframe_times(t)],

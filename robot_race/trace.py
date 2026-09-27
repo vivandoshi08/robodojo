@@ -16,7 +16,7 @@ import os
 import re
 import sys
 
-from .viewer import _atomic_write, _e, _load_json, _read_text, _url
+from .viewer import BANNER_CSS, _atomic_write, _e, _load_json, _read_text, _url, banners_html
 
 CSS = """
 :root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--fg:#1b1f24;--mut:#667085;--bd:#e3e6ea;
@@ -57,7 +57,7 @@ cursor:pointer}.call:hover{background:var(--code)}.call.on{background:var(--hl)}
 .clock{font:12px ui-monospace,Menlo,monospace;color:var(--mut);margin-top:4px}
 dialog{padding:0;border:0;background:transparent;max-width:96vw}dialog img{max-width:96vw;max-height:92vh;display:block}
 dialog::backdrop{background:rgba(0,0,0,.8)}
-"""
+""" + BANNER_CSS
 
 JS = r"""<script>
 const lb=document.getElementById('lb');
@@ -269,6 +269,7 @@ def write_trace(run_dir: str) -> str:
     parts = [f'<header><h1>{_e(run_id)} {_badge(status, status == "solved" if status != "running" else None)}</h1>'
              '<div class="meta">' + "".join(f'<span><span class="mut">{_e(k)}:</span> {_e(v)}</span>'
                                             for k, v in meta if v not in (None, "")) + "</div>"
+             + banners_html(s) +
              '<p class="mut">Everything below is read from files written at the time: the requests exactly as sent '
              '(images are the decoded bytes of the base64 blocks, sha256 re-checked on load), the raw API '
              'responses, the code that ran (sha256-matched to the reply), sim-timed robot calls and the '
