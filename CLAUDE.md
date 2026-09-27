@@ -16,7 +16,7 @@ bash setup.sh                       # venv + pinned deps + Panda assets + refere
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 bash scripts/fetch_assets.sh        # sparse-clones the Franka Panda from MuJoCo Menagerie (~36 MB, ~5 s)
-python scripts/check_reference.py   # expect: can/bottle/box/far-bin 10/10, paper ~6/10
+python scripts/check_reference.py   # expect: can/box/far-bin 10/10, bottle ~7/10, paper ~6/10
 echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
 ```
 
@@ -74,7 +74,7 @@ Steps A-D can run in parallel (different files). E is last.
 - Done when: the reference policy as a code string gives `success: true` + a playable GIF.
 
 **B. agent.py + run_agent.py** (parallel; build against FakeRobot / a canned result until A lands)
-- Model: `ANTHROPIC_MODEL` env var, else first id from `client.models.list()`.
+- Model: `ANTHROPIC_MODEL` env var, else `claude-sonnet-5` (pinned so races compare strategies, not models).
 - System prompt: short role line + `API_DOC` + output rules (one ```python block defining
   `run(robot)`, only `robot`/`np`/`math`, no imports of other modules, no I/O).
 - First user turn: task text (`TASKS[task]["text"]`) + `get_state()` JSON + front and top images

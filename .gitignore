@@ -220,3 +220,4 @@ __marimo__/
 # Robot Race
 runs/
 assets/menagerie/
+.claude/worktrees/
