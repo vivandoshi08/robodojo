@@ -1,59 +1,49 @@
-// Shared shapes. Episode mirrors what Memorable writes after every attempt;
-// if the real table uses different column names, change the mapping in
-// memorable.ts (fromRow), not these types.
+// Shapes of the files the simulations write under runs/ (CLAUDE.md §3 and §8).
+// GBrain only reads them.
 
-export const PARAM_KEYS = ["release_height_m", "toss_velocity_mps", "grasp_angle_deg"] as const;
-export type ParamKey = (typeof PARAM_KEYS)[number];
-export type TossParams = Record<ParamKey, number>;
-
-export interface BinPosition {
-  distance_m: number;
-  /** Negative = left of the robot, positive = right. */
-  angle_deg: number;
+/** runs/<run_id>/attempt_<k>/result.json */
+export interface AttemptResult {
+  task: string;
+  seed: number;
+  success: boolean;
+  time_s: number;
+  collisions: number;
+  energy_j: number;
+  dropped: boolean;
+  lifted: boolean;
+  error: string | null;
+  /** Not in the contract yet: needed for distance rules ("toss works past 50 cm"). */
+  bin_center?: number[];
+  /** Not in the contract yet: the pitch scores on it. */
+  bin_knocked_over?: boolean;
 }
 
-export type Outcome = "in_bin" | "rim_out" | "short" | "long" | "wide" | "dropped";
+/** runs/<run_id>/summary.json (only the fields we use). */
+export interface RunSummary {
+  task: string;
+  seed: number;
+  strategy: string | null;
+  status: "running" | "solved" | "failed" | "error";
+  solved_at: number | null;
+}
 
-export interface Episode {
-  episode_id: string;
-  race_id: string;
-  agent_id: string;
+export interface Attempt {
+  k: number;
+  result: AttemptResult;
+  code: string;
+}
+
+/** One racer = one run_agent.py process. */
+export interface Run {
+  run_id: string;
+  summary: RunSummary;
   strategy: string;
-  attempt: number;
-  trash_type: string;
-  bin_position: BinPosition;
-  params: TossParams;
-  outcome: Outcome;
-  score: number;
-  /** One-line reason the agent gave for the result. */
-  reason: string;
-}
-
-export const isSuccess = (e: Episode) => e.outcome === "in_bin";
-
-export interface AgentResult {
-  agent_id: string;
-  strategy: string;
-  total_score: number;
-  attempts: number;
-  successes: number;
-}
-
-/** What the referee hands us when a race ends. */
-export interface RaceResult {
-  race_id: string;
-  /** ISO timestamp. */
-  finished_at: string;
-  agents: AgentResult[];
-  /** Optional free-text summary from the referee, shown at the top of the page. */
-  summary?: string;
+  attempts: Attempt[];
 }
 
 // SkillOpt benchmark row, matching gbrain src/core/skillopt/types.ts.
-export type RuleCheck = { op: "contains" | "regex" | "section_present" | "max_chars"; arg: string | number };
-export type Judge = { kind: "rule"; checks: RuleCheck[] } | { kind: "llm"; rubric: string };
 export interface BenchmarkTask {
   task_id: string;
   task: string;
-  judge: Judge;
+  judge: { kind: "llm"; rubric: string };
 }

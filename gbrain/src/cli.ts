@@ -1,103 +1,61 @@
 #!/usr/bin/env bun
-// race-brain: the GBrain side of the race.
+// GBrain integration for the robot race (run from gbrain/):
 //
-//   brief <strategy>                     what an agent loads before a race
-//   verdict <race_id> [--results f.json] referee writes races/<id> to GBrain
-//   benchmark <strategy> [--judge llm]   episode table → skillopt-benchmark.jsonl
-//   optimize <strategy> [--preview-cost] [--no-mutate] [--max-cost N]
-//   after-race <race_id> [--results f.json] [--judge llm]
-//                                        verdict + benchmark + cost preview for the winner
+//   distill [--print]          runs/ → plain-language rules in skills/trash-to-bin/SKILL.md, saved to GBrain
+//   brief [--out context.md]   the skill, for run_agent.py --context-file (agents start from proven skills)
+//   benchmark                  runs/ → skillopt benchmark for the skill
+//   optimize [--preview-cost]  gbrain skillopt improves the skill
 //
-// Add --print to any command to echo gbrain commands instead of running them.
+// GBrain only reads runs/. Scoring and strategies stay with their owners.
 
-import { buildBenchmark, type JudgeMode, writeBenchmark } from "./benchmark.ts";
-import { buildBriefing, skillDirFor } from "./briefing.ts";
-import { config } from "./config.ts";
+import { buildBenchmark, writeBenchmark } from "./benchmark.ts";
+import { config, skillPath } from "./config.ts";
+import { updateSkill } from "./distill.ts";
 import { GBrain } from "./gbrain.ts";
-import { FileMemorable, type MemorableClient } from "./memorable.ts";
-import { runSkillopt } from "./skillopt.ts";
-import type { RaceResult } from "./types.ts";
-import { publishVerdict, standingsFrom } from "./verdict.ts";
+import { loadRuns } from "./runs.ts";
 
 const argv = process.argv.slice(2);
 const flag = (name: string) => argv.includes(`--${name}`);
-const option = (name: string) => {
-  const i = argv.indexOf(`--${name}`);
-  return i >= 0 ? argv[i + 1] : undefined;
-};
-const [command, target] = argv;
-
+const option = (name: string) => argv[argv.indexOf(`--${name}`) + 1];
 const g = new GBrain(flag("print"));
-const memorable: MemorableClient = new FileMemorable(config.memorableFixture);
-
-async function loadResult(raceId: string): Promise<RaceResult> {
-  const file = option("results");
-  if (file) return (await Bun.file(file).json()) as RaceResult;
-  // No referee file: derive standings from the full episode table for this race.
-  const episodes = await memorable.episodeTable({ raceIds: [raceId] });
-  if (episodes.length === 0) throw new Error(`No episodes for race ${raceId}.`);
-  return {
-    race_id: raceId,
-    finished_at: new Date().toISOString(),
-    agents: standingsFrom(episodes),
-  };
-}
-
-async function verdict(raceId: string): Promise<RaceResult> {
-  const result = await loadResult(raceId);
-  const slug = await publishVerdict(g, result, await memorable.raceEpisodes(raceId));
-  console.log(`Verdict written to ${slug}; winner: ${result.agents[0]?.strategy}`);
-  return result;
-}
-
-async function benchmark(strategy: string): Promise<void> {
-  const mode = (option("judge") ?? "rule") as JudgeMode;
-  const { tasks, skipped, warnings } = buildBenchmark(await memorable.episodeTable(), mode);
-  const path = await writeBenchmark(skillDirFor(strategy), tasks);
-  console.log(`Wrote ${tasks.length} tasks (${mode} judges) to ${path}`);
-  if (skipped.length) console.log(`Skipped ${skipped.length} scenarios with no successful throw yet.`);
-  for (const w of warnings) console.warn(`warning: ${w}`);
-}
-
-async function optimize(strategy: string, previewCost = flag("preview-cost")): Promise<void> {
-  const maxCost = option("max-cost");
-  const out = await runSkillopt(g, strategy, {
-    previewCost,
-    noMutate: flag("no-mutate"),
-    maxCostUsd: maxCost ? Number(maxCost) : undefined,
-  });
-  if (out) console.log(out);
-  if (!previewCost && !g.print) {
-    console.log(`Review with: git diff ${skillDirFor(strategy)}/SKILL.md`);
-  }
-}
 
 async function main(): Promise<void> {
-  if (!target) throw new Error("Usage: race-brain <brief|verdict|benchmark|optimize|after-race> <strategy|race_id> [--print]");
-  switch (command) {
-    case "brief":
-      console.log(await buildBriefing(g, target));
+  switch (argv[0]) {
+    case "distill": {
+      const runs = await loadRuns();
+      const skill = await updateSkill(runs);
+      await g.put(config.page, skill);
+      console.log(`Distilled ${runs.length} runs into ${skillPath} and GBrain page ${config.page}.`);
+      console.log("Commit SKILL.md before running optimize.");
       return;
-    case "verdict":
-      await verdict(target);
+    }
+    case "brief": {
+      const out = flag("out") ? option("out")! : "context.md";
+      const body = (await Bun.file(skillPath).text()).replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+      await Bun.write(out, `${body}\n`);
+      console.log(`Wrote ${out}. Pass it to racers with --context-file ${out}`);
       return;
-    case "benchmark":
-      await benchmark(target);
+    }
+    case "benchmark": {
+      const { tasks, warning } = await buildBenchmark(await loadRuns());
+      console.log(`Wrote ${tasks.length} tasks to ${await writeBenchmark(tasks)}`);
+      if (warning) console.warn(`warning: ${warning}`);
       return;
-    case "optimize":
-      await optimize(target);
-      return;
-    case "after-race": {
-      const result = await verdict(target);
-      const winner = result.agents[0]!.strategy;
-      await benchmark(winner);
-      // Stop at a cost preview; running for real is a deliberate `optimize` call.
-      await optimize(winner, true);
-      console.log(`Next: race-brain optimize ${winner}`);
+    }
+    case "optimize": {
+      const out = await g.run([
+        "skillopt", config.skill,
+        "--skills-dir", config.skillsDir,
+        "--split", config.skillopt.split,
+        "--max-cost-usd", String(config.skillopt.maxCostUsd),
+        ...(flag("preview-cost") ? ["--dry-run"] : []),
+      ]);
+      if (out) console.log(out);
+      if (!flag("preview-cost") && !g.print) console.log(`See what improved: git diff ${skillPath}`);
       return;
     }
     default:
-      throw new Error(`Unknown command: ${command}`);
+      throw new Error("Usage: bun src/cli.ts <distill|brief|benchmark|optimize> [--print]");
   }
 }
 

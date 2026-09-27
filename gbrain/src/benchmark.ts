@@ -1,162 +1,80 @@
-// Memorable episode table → skills/<strategy>/skillopt-benchmark.jsonl.
+// runs/ history → skills/trash-to-bin/skillopt-benchmark.jsonl.
 //
-// skillopt can't read a score table directly: it runs the skill on tasks and
-// judges each answer. So every scenario (trash type + snapped bin position)
-// with at least one throw in the bin becomes one task, and the judge checks
-// whether the skill's answer lands inside the parameter range that actually
-// scored in past races.
+// skillopt can't run the simulator: it gives the skill a task, gets code
+// back, and an LLM judge grades that text. So each task + seed from past
+// races becomes one benchmark task, judged against code that actually got
+// the item into the bin and the reasons other attempts failed.
 
-import { config } from "./config.ts";
-import { describeBin, type Scenario, scenarioOf } from "./scenario.ts";
-import {
-  type BenchmarkTask,
-  type Episode,
-  isSuccess,
-  PARAM_KEYS,
-  type ParamKey,
-  type RuleCheck,
-} from "./types.ts";
+import { join } from "node:path";
+import { config, skillDir } from "./config.ts";
+import { failureReason } from "./runs.ts";
+import type { Attempt, BenchmarkTask, Run } from "./types.ts";
 
-export type JudgeMode = "rule" | "llm";
+const truncate = (code: string, lines = 40) => code.trimEnd().split("\n").slice(0, lines).join("\n");
 
-interface Range {
-  lo: number;
-  hi: number;
+/** Robot API doc and task texts, read from robot_race/ so prompts match what agents see. */
+async function readRobotRace(): Promise<{ apiDoc: string; taskText: Record<string, string> }> {
+  const iface = await Bun.file(join(config.repoRoot, "robot_race/interfaces.py")).text();
+  const apiDoc = iface.match(/API_DOC = """([\s\S]*?)"""/)?.[1]?.trim();
+  if (!apiDoc) throw new Error("API_DOC not found in robot_race/interfaces.py");
+  const tasks = await Bun.file(join(config.repoRoot, "robot_race/tasks.py")).text();
+  const taskText: Record<string, string> = {};
+  for (const m of tasks.matchAll(/"(\w+)":\s*dict\([^)]*?text="([^"]+)"/g)) taskText[m[1]!] = m[2]!;
+  return { apiDoc, taskText };
 }
 
-interface Group {
-  scenario: Scenario;
-  successes: Episode[];
-  failures: Episode[];
-}
+export async function buildBenchmark(runs: Run[]): Promise<{ tasks: BenchmarkTask[]; warning?: string }> {
+  const { apiDoc, taskText } = await readRobotRace();
+  const attempts = runs.flatMap((r) => r.attempts);
+  const setups = [...new Set(attempts.map((a) => `${a.result.task}|${a.result.seed}`))].sort();
 
-function groupByScenario(episodes: Episode[]): Group[] {
-  const groups = new Map<string, Group>();
-  for (const e of episodes) {
-    const scenario = scenarioOf(e);
-    const g = groups.get(scenario.key) ?? { scenario, successes: [], failures: [] };
-    (isSuccess(e) ? g.successes : g.failures).push(e);
-    groups.set(scenario.key, g);
-  }
-  return [...groups.values()].sort((a, b) => a.scenario.key.localeCompare(b.scenario.key));
-}
-
-function successRange(successes: Episode[], key: ParamKey, margin: number): Range {
-  const vals = successes.map((e) => e.params[key]);
-  const lo = Math.min(...vals) - margin;
-  return { lo: key === "grasp_angle_deg" ? lo : Math.max(0, lo), hi: Math.max(...vals) + margin };
-}
-
-const fmt = (key: ParamKey, v: number) => v.toFixed(config.precision[key]);
-
-/** Every value in the range at the skill's required precision, e.g. 2.3|2.4|2.5. */
-function valuesInRange(key: ParamKey, r: Range): string[] {
-  const step = 10 ** -config.precision[key];
-  const out: string[] = [];
-  for (let i = Math.ceil(r.lo / step - 1e-9); i <= Math.floor(r.hi / step + 1e-9); i++) {
-    out.push(fmt(key, i * step));
-  }
-  return out;
-}
-
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
-const numberPattern = (key: ParamKey) =>
-  config.precision[key] === 0 ? "-?\\d+" : `-?\\d+\\.\\d{${config.precision[key]}}`;
-
-/** The exact output lines SKILL.md tells the agent to end with. */
-export const PARAMS_LINE_REGEX = `^PARAMS ${PARAM_KEYS.map((k) => `${k}=${numberPattern(k)}`).join(" ")}\\s*$`;
-export const REASON_LINE_REGEX = "^REASON: \\S.*$";
-
-function taskPrompt(g: Group): string {
-  const misses = g.failures.slice(-config.maxFailuresInPrompt).map(
-    (e) =>
-      `- ${PARAM_KEYS.map((k) => `${k}=${fmt(k, e.params[k])}`).join(" ")} → ${e.outcome} ("${e.reason}")`,
-  );
-  return [
-    "Race attempt.",
-    `Trash: ${g.scenario.trash_type}`,
-    `Bin: ${describeBin(g.scenario)}`,
-    ...(misses.length ? ["Recent misses in this situation (recalled from Memorable):", ...misses] : []),
-    "Choose the toss parameters for this attempt.",
-  ].join("\n");
-}
-
-function ruleJudge(g: Group): { kind: "rule"; checks: RuleCheck[] } {
-  const ranges = PARAM_KEYS.map((k): RuleCheck => {
-    const values = valuesInRange(k, successRange(g.successes, k, config.margin[k]));
-    return { op: "regex", arg: `${k}=(?:${values.map(escapeRe).join("|")})(?![\\d.])` };
-  });
-  return {
-    kind: "rule",
-    checks: [
-      { op: "regex", arg: PARAMS_LINE_REGEX },
-      ...ranges,
-      { op: "regex", arg: REASON_LINE_REGEX },
-      { op: "max_chars", arg: 800 },
-    ],
-  };
-}
-
-function llmJudge(g: Group): { kind: "llm"; rubric: string } {
-  const ranges = PARAM_KEYS.map((k) => {
-    const r = successRange(g.successes, k, 0);
-    return `${k} ${fmt(k, r.lo)}–${fmt(k, r.hi)}`;
-  }).join(", ");
-  const misses = g.failures
-    .map((e) => PARAM_KEYS.map((k) => `${k}=${fmt(k, e.params[k])}`).join(" ") + ` (${e.outcome})`)
-    .join("; ");
-  return {
-    kind: "llm",
-    rubric: [
-      "Score the answer from 0 to 1.",
-      `In past races, throws in this situation that landed in the bin used: ${ranges} (${g.successes.length} successful throws).`,
-      misses ? `These throws missed: ${misses}.` : "",
-      "1.0: ends with a valid PARAMS line and REASON line, all three parameters are inside the successful ranges, and the reason names the factor that matters for this trash type.",
-      "0.5: valid PARAMS line and at least two parameters in range.",
-      "0.0: no PARAMS line, or it repeats a combination that missed.",
-    ]
-      .filter(Boolean)
-      .join("\n"),
-  };
-}
-
-export interface BuildResult {
-  tasks: BenchmarkTask[];
-  /** Scenarios with no successful throw yet, so no answer key. */
-  skipped: string[];
-  warnings: string[];
-}
-
-/**
- * Successful throws from every agent are used as the answer key, not just the
- * winner's: the skill being tuned is the winner's, but any throw that landed
- * is evidence of what works.
- */
-export function buildBenchmark(episodes: Episode[], mode: JudgeMode = "rule"): BuildResult {
   const tasks: BenchmarkTask[] = [];
-  const skipped: string[] = [];
-  for (const g of groupByScenario(episodes)) {
-    if (g.successes.length === 0) {
-      skipped.push(g.scenario.key);
-      continue;
-    }
+  for (const setup of setups) {
+    const [task, seedStr] = setup.split("|") as [string, string];
+    const seed = Number(seedStr);
+    const here = attempts.filter((a) => a.result.task === task && a.result.seed === seed);
+    const wins = here.filter((a) => a.result.success);
+    // Prefer code that solved this exact setup; fall back to the same task.
+    const examples: Attempt[] = (wins.length ? wins : attempts.filter((a) => a.result.task === task && a.result.success)).slice(0, 2);
+    if (examples.length === 0) continue;
+    const misses = [...new Set(here.map((a) => failureReason(a.result)).filter(Boolean))] as string[];
+
     tasks.push({
-      task_id: g.scenario.key,
-      task: taskPrompt(g),
-      judge: mode === "rule" ? ruleJudge(g) : llmJudge(g),
+      task_id: `${task}-s${seed}`,
+      task: [
+        taskText[task] ?? task,
+        `Task ${task}, seed ${seed}. Read the item and bin positions with robot.get_state().`,
+        "",
+        apiDoc,
+        "",
+        "Reply with one ```python block that defines run(robot). Only `robot`, `np` and `math` are available.",
+      ].join("\n"),
+      judge: {
+        kind: "llm",
+        rubric: [
+          "Grade Python code for a simulated robot arm (you cannot run it): would it get the item into the bin?",
+          "",
+          `Code that succeeded on ${task} in past races:`,
+          ...examples.map((a) => `\`\`\`python\n${truncate(a.code)}\n\`\`\``),
+          ...(misses.length ? ["", `Past attempts at this setup failed because they: ${misses.join("; ")}.`] : []),
+          "",
+          "1.0: one run(robot) using only the documented API, doing what made the successful code work and avoiding the listed failures.",
+          "0.5: valid and plausible, but misses one thing the successful code handles.",
+          "0.0: no run(robot), invented API calls, or repeats a listed failure.",
+        ].join("\n"),
+      },
     });
   }
-  const warnings =
-    tasks.length < config.minTasks
-      ? [
-          `Only ${tasks.length} tasks; skillopt --split ${config.skillopt.split} needs at least ${config.minTasks}. Run more races, or shrink config.bucket so bin positions split into more scenarios.`,
-        ]
-      : [];
-  return { tasks, skipped, warnings };
+
+  const warning =
+    tasks.length < 15
+      ? `Only ${tasks.length} tasks; skillopt --split ${config.skillopt.split} needs at least 15. Race more seeds.`
+      : undefined;
+  return { tasks, warning };
 }
 
-export async function writeBenchmark(skillDir: string, tasks: BenchmarkTask[]): Promise<string> {
-  const path = `${skillDir}/skillopt-benchmark.jsonl`;
+export async function writeBenchmark(tasks: BenchmarkTask[]): Promise<string> {
+  const path = join(skillDir, "skillopt-benchmark.jsonl");
   await Bun.write(path, tasks.map((t) => JSON.stringify(t)).join("\n") + "\n");
   return path;
 }

@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Race Tracker</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --track: #f0efec; --code-bg: #f3f2ee;
+  --good: #0ca30c; --critical: #d03b3b; --good-text: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --track: #383835; --code-bg: #232322; --good-text: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --track: #383835; --code-bg: #232322; --good-text: #0ca30c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); text-transform: uppercase;
+  letter-spacing: 0.04em; margin: 28px 0 10px; }
+.live { color: var(--muted); font-size: 12px; }
+.live .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good);
+  margin-right: 6px; vertical-align: 1px; }
+.live.off .dot { background: var(--critical); }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 16px; }
+.tab { border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+  padding: 6px 12px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 13px; }
+.tab[aria-selected="true"] { color: var(--ink); border-color: var(--ink); font-weight: 600; }
+.tab small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.tile { padding: 14px 16px; min-width: 0; }
+.tile .k { color: var(--ink-2); font-size: 12px; }
+.tile .v { font-size: 26px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .v small { color: var(--muted); font-size: 16px; font-weight: 600; }
+.tile .s { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+td.num, th.num { text-align: right; }
+tr:last-child td { border-bottom: 0; }
+tr.top td { background: color-mix(in srgb, var(--good) 8%, transparent); }
+.who { font-weight: 600; }
+.who small { display: block; color: var(--muted); font-weight: 400; font-size: 12px;
+  max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); margin-left: 6px; }
+.badge.win { color: var(--good-text); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.seeds { display: flex; gap: 10px; }
+.seedgrp { display: flex; gap: 3px; }
+.chip { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; color: #fff; cursor: default; }
+.chip.ok { background: var(--good); }
+.chip.bad { background: var(--critical); }
+.chip.pending { background: transparent; border: 1.5px dashed var(--axis); }
+.rate { display: flex; align-items: center; gap: 8px; }
+.bar { position: relative; width: 70px; height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; }
+.bar > span { position: absolute; inset: 0 auto 0 0; background: var(--series-1); border-radius: 0 4px 4px 0; }
+.muted { color: var(--muted); }
+.fail { color: var(--ink-2); }
+.policy { display: grid; grid-template-columns: 256px minmax(0, 1fr); gap: 16px; padding: 16px; }
+.policy .meta { grid-column: 1 / -1; color: var(--ink-2); }
+.policy .meta b { color: var(--ink); }
+.media { width: 256px; height: 256px; border-radius: 8px; background: var(--track); display: grid;
+  place-items: center; overflow: hidden; color: var(--muted); font-size: 12px; text-align: center; }
+.media img, .media video { width: 100%; height: 100%; object-fit: contain; }
+pre { margin: 0; background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow: auto;
+  max-height: 256px; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
+.lessons { padding: 14px 18px; margin: 0; }
+.lessons li { margin: 4px 0 4px 18px; color: var(--ink-2); }
+.lessons li.key { color: var(--ink); font-weight: 600; }
+.compare { padding: 16px 18px; }
+.cmp-row { display: grid; grid-template-columns: 160px 1fr 280px; gap: 12px; align-items: center; padding: 6px 0; }
+.cmp-row .lbl { font-weight: 600; }
+.cmp-row .lbl small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.cmp-bar { position: relative; height: 22px; background: var(--track); border-radius: 4px; }
+.cmp-bar > span { position: absolute; inset: 0 auto 0 0; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 2px; }
+.cmp-row .val { color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+.delta { margin-top: 10px; color: var(--good-text); font-weight: 600; }
+.empty { padding: 28px; text-align: center; color: var(--muted); }
+#tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px;
+  padding: 6px 9px; border-radius: 6px; opacity: 0; transition: opacity .08s; z-index: 10; max-width: 320px; }
+@media (max-width: 760px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .policy { grid-template-columns: 1fr; }
+  .cmp-row { grid-template-columns: 1fr; gap: 4px; }
+  .cmp-row .val { text-align: left; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Race Tracker</h1>
+    <span id="live" class="live"><span class="dot"></span><span id="live-text">connecting…</span></span>
+  </header>
+  <div id="tabs" class="tabs" role="tablist"></div>
+  <div id="tiles" class="tiles"></div>
+
+  <h2>Leaderboard</h2>
+  <div class="card table-wrap"><table>
+    <thead><tr>
+      <th>#</th><th>Agent</th><th>Tries per seed</th><th>Seeds solved</th><th class="num">Avg tries</th>
+      <th class="num">Score</th><th class="num">Time</th><th class="num">Collisions</th><th class="num">Energy</th>
+      <th>Top failure</th>
+    </tr></thead>
+    <tbody id="rows"><tr><td colspan="10" class="empty">Waiting for the first attempt…</td></tr></tbody>
+  </table></div>
+
+  <h2 id="policy-title">Leading policy</h2>
+  <div id="policy" class="card policy"><div class="meta muted">Appears once an agent solves a seed.</div></div>
+
+  <h2>What this race learned</h2>
+  <ul id="lessons" class="card lessons"><li class="muted" style="list-style:none;margin-left:0">No attempts yet.</li></ul>
+
+  <h2>Race over race</h2>
+  <div id="compare" class="card compare"><div class="muted">Appears once there are two races.</div></div>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = (x) => x == null ? "–" : `${Math.round(x * 100)}%`;
+const fmt = (x, d = 1) => x == null ? "–" : Number(x).toFixed(d);
+const words = (s) => String(s || "").replace(/_/g, " ");
+let selected = null, userPicked = false, policyKey = null;
+
+const tip = $("tip");
+document.addEventListener("mouseover", e => {
+  const t = e.target.closest("[data-tip]");
+  if (!t) { tip.style.opacity = 0; return; }
+  tip.textContent = t.dataset.tip; tip.style.opacity = 1;
+});
+document.addEventListener("mousemove", e => {
+  tip.style.left = Math.min(e.clientX + 12, innerWidth - 330) + "px";
+  tip.style.top = (e.clientY + 14) + "px";
+});
+
+async function get(path) {
+  const r = await fetch(path, { cache: "no-store" });
+  if (!r.ok) throw new Error(`${path}: ${r.status}`);
+  return r.json();
+}
+
+function renderTabs(races) {
+  $("tabs").innerHTML = races.map(r => {
+    const s = r.summary;
+    return `<button class="tab" role="tab" aria-selected="${r.race_id === selected}" data-id="${esc(r.race_id)}">
+      ${esc(r.race_id)}${r.label ? " · " + esc(r.label) : ""}<small>${r.status === "closed" ? "done" : "live"} · ${s.seeds_solved}/${s.seeds_attempted} solved</small></button>`;
+  }).join("");
+  $("tabs").querySelectorAll(".tab").forEach(b => b.onclick = () => { selected = b.dataset.id; userPicked = true; policyKey = null; refresh(); });
+}
+
+function topOf(lb) { return lb.scores.find(x => x.agent_id === (lb.final ? lb.winner : lb.leader)); }
+
+function renderTiles(lb) {
+  const s = lb.summary, top = topOf(lb);
+  const target = lb.scores.reduce((a, x) => a + x.seeds_target, 0);
+  const tiles = [
+    ["Attempts", `${s.attempts}`, `${s.agents} agent${s.agents === 1 ? "" : "s"} racing`],
+    ["Seeds solved", `${s.seeds_solved}<small> / ${Math.max(target, s.seeds_attempted)}</small>`,
+      `within ${lb.race.scoring.max_attempts} tries`],
+    ["Solved on first try", pct(s.first_try_rate),
+      s.mean_tries_to_solve == null ? "no seed solved yet" : `${fmt(s.mean_tries_to_solve)} tries to solve on average`],
+    [lb.final ? "Winner" : "Leading", top ? esc(top.persona || top.agent_id) : "–",
+      top ? `${esc(top.agent_id)} · score ${fmt(top.score)}` : "no attempts yet"],
+  ];
+  $("tiles").innerHTML = tiles.map(([k, v, sub]) =>
+    `<div class="card tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`).join("");
+}
+
+function seedChips(s, maxTries) {
+  const groups = [];
+  const n = Math.max(s.seeds_target, s.seeds.length);
+  for (let i = 0; i < n; i++) {
+    const o = s.seeds[i];
+    if (!o) { groups.push(`<span class="seedgrp"><span class="chip pending" data-tip="Seed not started"></span></span>`); continue; }
+    const chips = o.tries.map(t => t.success
+      ? `<span class="chip ok" data-tip="Seed ${o.seed} · try ${t.attempt}: solved">✓</span>`
+      : `<span class="chip bad" data-tip="Seed ${o.seed} · try ${t.attempt}: ${esc(words(t.failure_mode))}${t.error ? " · " + esc(t.error) : ""}">✗</span>`);
+    if (!o.done) chips.push(`<span class="chip pending" data-tip="Seed ${o.seed}: next try running"></span>`);
+    groups.push(`<span class="seedgrp">${chips.join("")}</span>`);
+  }
+  return `<div class="seeds">${groups.join("")}</div>`;
+}
+
+function renderRows(lb) {
+  if (!lb.scores.length) { $("rows").innerHTML = `<tr><td colspan="10" class="empty">No agents yet.</td></tr>`; return; }
+  const top = topOf(lb);
+  $("rows").innerHTML = lb.scores.map(s => {
+    const isTop = top && s.agent_id === top.agent_id;
+    const badge = isTop ? `<span class="badge win">${lb.final ? "✓ winner" : "leading"}</span>`
+      : (s.skill_eligible ? `<span class="badge">skill-ready</span>` : "");
+    const bd = Object.entries(s.score_breakdown).map(([k, v]) => `${words(k)} ${v > 0 ? "+" : ""}${v}`).join(" · ");
+    const choices = s.info && s.info.choices ? Object.values(s.info.choices) : [];
+    const sub = [s.agent_id, s.mode, ...choices].filter(Boolean).map(esc).join(" · ");
+    const plan = s.info && s.info.strategy ? ` data-tip="${esc(s.info.strategy)}"` : "";
+    return `<tr class="${isTop ? "top" : ""}">
+      <td class="muted">${s.rank}</td>
+      <td class="who"${plan}>${esc(s.persona || s.agent_id)}${badge}<small>${sub}</small></td>
+      <td>${seedChips(s, lb.race.scoring.max_attempts)}</td>
+      <td><div class="rate"><div class="bar" data-tip="${s.seeds_solved} of ${s.seeds_attempted} seeds solved"><span style="width:${s.solve_rate * 100}%"></span></div>${s.seeds_solved}/${s.seeds_attempted}</div></td>
+      <td class="num">${fmt(s.mean_tries_to_solve)}</td>
+      <td class="num" data-tip="${esc(bd)}"><b>${fmt(s.score)}</b></td>
+      <td class="num">${s.mean_time_s == null ? "–" : fmt(s.mean_time_s) + " s"}</td>
+      <td class="num">${fmt(s.collisions_per_seed, 2)}</td>
+      <td class="num">${fmt(s.mean_energy)}</td>
+      <td class="fail"${s.top_error ? ` data-tip="${esc(s.top_error)}"` : ""}>${s.top_failure ? esc(words(s.top_failure)) : '<span class="muted">–</span>'}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function renderPolicy(lb) {
+  const top = topOf(lb);
+  $("policy-title").textContent = lb.final ? "Winning policy" : "Leading policy";
+  const b = top && top.best_attempt;
+  if (!b) { policyKey = null; $("policy").innerHTML = `<div class="meta muted">Appears once an agent solves a seed.</div>`; return; }
+  const key = [lb.race.race_id, top.agent_id, b.seed, b.attempt, lb.final, top.skill_eligible].join("/");
+  if (key === policyKey) return;              // don't restart the GIF on every poll
+  policyKey = key;
+  const base = `/races/${encodeURIComponent(lb.race.race_id)}/attempts/${encodeURIComponent(top.agent_id)}/${b.seed}/${b.attempt}`;
+  let code = "";
+  try { code = (await get(base)).code || ""; } catch (e) { }
+  const isVideo = /\.(mp4|webm|mov)$/i.test(b.video || "");
+  const media = !b.video ? `<div>No video recorded</div>`
+    : isVideo ? `<video src="${base}/media/video" autoplay loop muted playsinline onerror="this.parentNode.textContent='Video file not found on this machine'"></video>`
+    : `<img src="${base}/media/video" alt="Attempt recording" onerror="this.parentNode.textContent='Video file not found on this machine'">`;
+  const approach = top.info && top.info.strategy ? `<div class="meta">${esc(top.info.strategy)}</div>` : "";
+  $("policy").innerHTML = `
+    <div class="meta"><b>${esc(top.persona || top.agent_id)}</b> · ${esc(top.agent_id)} · seed ${b.seed}, try ${b.attempt}${b.time_s != null ? " · " + fmt(b.time_s) + " s" : ""}${top.skill_eligible ? " · ready to save as a skill" : ""}</div>${approach}
+    <div class="media">${media}</div>
+    <pre>${esc(code || "No code recorded")}</pre>`;
+}
+
+function renderLessons(ls) {
+  if (!ls.lines.length) { $("lessons").innerHTML = `<li class="muted" style="list-style:none;margin-left:0">No attempts yet.</li>`; return; }
+  $("lessons").innerHTML = ls.lines.map(l =>
+    `<li class="${/^(Winner|Leading|Most common)/.test(l) ? "key" : ""}">${esc(l)}</li>`).join("");
+}
+
+function renderCompare(cmp) {
+  const races = cmp.races.filter(r => r.attempts > 0);
+  if (races.length < 2) { $("compare").innerHTML = `<div class="muted">Appears once there are two races.</div>`; return; }
+  const rows = races.map(r => `<div class="cmp-row">
+      <div class="lbl">${esc(r.race_id)}<small>${esc(r.label)}</small></div>
+      <div class="cmp-bar" data-tip="${esc(r.race_id)}: ${pct(r.first_try_rate)} of seeds solved on the first try"><span style="width:${r.first_try_rate * 100}%"></span></div>
+      <div class="val">${pct(r.first_try_rate)} first try · ${r.seeds_solved}/${r.seeds_attempted} solved · ${fmt(r.mean_tries_to_solve)} tries</div>
+    </div>`).join("");
+  const first = races[0], last = races[races.length - 1];
+  const d = Math.round((last.first_try_rate - first.first_try_rate) * 100);
+  const delta = `<div class="delta">${d >= 0 ? "▲" : "▼"} ${Math.abs(d)} points first-try rate from ${esc(first.race_id)} to ${esc(last.race_id)}</div>`;
+  $("compare").innerHTML = `<div class="muted" style="margin-bottom:6px">Share of seeds solved on the first try</div>${rows}${delta}`;
+}
+
+async function refresh() {
+  try {
+    const races = await get("/races");
+    if (!races.length) { $("live-text").textContent = "live · no races yet"; return; }
+    if (!userPicked || !races.some(r => r.race_id === selected)) {
+      const next = races[races.length - 1].race_id;
+      if (next !== selected) policyKey = null;
+      selected = next;
+    }
+    renderTabs(races);
+    const id = encodeURIComponent(selected);
+    const [lb, ls, cmp] = await Promise.all([get(`/races/${id}/leaderboard`), get(`/races/${id}/lessons`), get("/compare")]);
+    renderTiles(lb); renderRows(lb); renderLessons(ls); renderCompare(cmp);
+    await renderPolicy(lb);
+    $("live").classList.remove("off");
+    $("live-text").textContent = `live · updated ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    $("live").classList.add("off");
+    $("live-text").textContent = "tracker offline, retrying";
+  }
+}
+refresh();
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>
