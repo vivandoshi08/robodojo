@@ -63,8 +63,8 @@ def build_model(item: str, item_pos, item_yaw: float, bin_center=None) -> tuple[
     spec = mujoco.MjSpec.from_file(PANDA_XML)
     for k in list(spec.keys):  # keyframe no longer matches once we add objects
         spec.delete(k)
-    spec.visual.global_.offwidth = 960
-    spec.visual.global_.offheight = 720
+    spec.visual.global_.offwidth = 1920
+    spec.visual.global_.offheight = 1080
 
     spec.body("hand").add_site(name="tcp", pos=[0, 0, TCP_OFFSET], size=[0.005, 0, 0], rgba=[0, 1, 0, 0.5])
 
