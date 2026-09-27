@@ -35,7 +35,7 @@ Prereqs: Docker Desktop running, Node >= 24.15, an Anthropic API key.
 ```bash
 # 1. QM itself (kept outside this repo; we depend on it, we don't fork it)
 git clone https://github.com/yc-software/qm ../qm && (cd ../qm && npm ci)
-(cd ../qm && npm run sandbox:local:build)          # qm-sandbox-local:latest (amd64, ~10-20 min on Apple Silicon)
+bash qm/build_qm_base.sh                            # qm-sandbox-local:latest, native arch (QM's own script forces amd64 -> MuJoCo SIGILL on Apple Silicon)
 
 # 2. Our sandbox image on top of it
 bash qm/build_sandbox.sh                            # robodojo-qm-sandbox:latest, runs a reference-policy smoke test
@@ -60,6 +60,7 @@ export QM_DEV_ENV="$PWD/qm/dev.env"
 
 ```
 qm/sandbox/Dockerfile        QM local sandbox + MuJoCo (EGL) + uv env + Panda assets + smoke test
+qm/build_qm_base.sh          builds QM's base sandbox image for the host arch
 qm/build_sandbox.sh          builds robodojo-qm-sandbox:latest
 qm/dev.env.example           dev-instance settings (local sandbox image, Postgres stores, swarms)
 qm/strategies.json           strategy cards, one swarm worker each
