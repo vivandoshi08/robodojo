@@ -39,12 +39,18 @@ async function loadRun(runsDir: string, runId: string): Promise<Run> {
   return { run_id: runId, summary, strategy: strategyName(summary.strategy, runId), attempts };
 }
 
-/** Every finished run (status other than "running"). */
-export async function loadRuns(runsDir = config.runsDir): Promise<Run[]> {
+/**
+ * Every finished run (status other than "running"). Nested trees are scanned too (up to 3 levels),
+ * so QM sandboxes collected into runs/qm/<container>/... are distilled alongside local runs.
+ */
+export async function loadRuns(runsDir = config.runsDir, depth = 3): Promise<Run[]> {
   const entries = await readdir(runsDir, { withFileTypes: true }).catch(() => []);
   const runs: Run[] = [];
   for (const d of entries.filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!(await Bun.file(join(runsDir, d.name, "summary.json")).exists())) continue;
+    if (!(await Bun.file(join(runsDir, d.name, "summary.json")).exists())) {
+      if (depth > 1 && !/^attempt_\d+$/.test(d.name)) runs.push(...(await loadRuns(join(runsDir, d.name), depth - 1)));
+      continue;
+    }
     const run = await loadRun(runsDir, d.name);
     if (run.summary.status !== "running" && run.attempts.length) runs.push(run);
   }

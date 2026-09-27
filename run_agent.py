@@ -2,7 +2,7 @@
 
     uv run python run_agent.py --task can_to_bin --seed 0 [--tries 5] [--strategy "..."] [--example]
         [--context-file memory.md] [--fast] [--run-id ID] [--runs-dir runs] [--timeout 180]
-        [--plan plan.json --agent-id agent-1 [--race-id ID] [--tracker-url URL]]
+        [--plan plan.json --agent-id agent-1 [--race-id ID] [--tracker-url URL]] [--memory/--no-memory]
 
 Exit code 0 if solved, 1 otherwise (2 on setup errors such as a missing API key).
 
@@ -43,6 +43,8 @@ def main(argv=None) -> int:
     ap.add_argument("--agent-id", help="agent id in --plan (e.g. agent-1)")
     ap.add_argument("--race-id", help="racetrack race to record attempts in (default: the plan's race_id)")
     ap.add_argument("--tracker-url", help="racetrack server (default: $RACETRACK_URL or http://localhost:8000)")
+    ap.add_argument("--memory", action=argparse.BooleanOptionalAction, default=None,
+                    help="record every attempt in the episode memory (Memorable layer); default on with --plan")
     a = ap.parse_args(argv)
     context = Path(a.context_file).read_text() if a.context_file else None
     strategy, race, on_attempt = a.strategy or None, None, None
@@ -62,6 +64,15 @@ def main(argv=None) -> int:
             tracker = Tracker(a.tracker_url)
             on_attempt = lambda k, result, adir: tracker.record_attempt(  # noqa: E731
                 race["race_id"], a.agent_id, a.seed, k, adir / "result.json", run_id=adir.parent.name)
+    if a.memory is None:
+        a.memory = bool(a.plan)
+    if a.memory:
+        from robot_race import memory_hooks
+        mem = lambda k, result, adir: memory_hooks.on_attempt_memorable(  # noqa: E731
+            k, result, adir, task=a.task, seed=a.seed,
+            strategy=(race or {}).get("strategy_name") or (a.strategy[:40] if a.strategy else None),
+            race_id=(race or {}).get("race_id"), agent_id=a.agent_id)
+        on_attempt = memory_hooks.chain(on_attempt, mem)
     try:
         s = run_agent_loop(a.task, a.seed, tries=a.tries, strategy=strategy, context=context,
                            example=a.example, fast=a.fast, run_id=a.run_id, runs_dir=a.runs_dir,
