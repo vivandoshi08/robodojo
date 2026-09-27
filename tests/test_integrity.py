@@ -34,7 +34,7 @@ def env(monkeypatch, tmp_path):
     """Real viewer + trace, fake executor and scene (no sim, no network)."""
     monkeypatch.setitem(sys.modules, "robot_race.executor", types.SimpleNamespace(run_policy=fake_run_policy))
     img = agent.png_b64(np.full((48, 64, 3), 5, np.uint8))
-    monkeypatch.setattr(agent, "observe_scene", lambda task, seed: ({"item": {"pos": [0.5, -0.2, 0.25]}},
+    monkeypatch.setattr(agent, "observe_scene", lambda task, seed, **kw: ({"item": {"pos": [0.5, -0.2, 0.25]}},
                                                                      {"front": img, "top": img}))
     monkeypatch.setattr(agent, "_sleep", lambda s: None)
     return types.SimpleNamespace(runs=tmp_path / "runs")
